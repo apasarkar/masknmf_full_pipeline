@@ -15,18 +15,17 @@ from dash import DiskcacheManager, CeleryManager, Input, Output, html
 import shutil
 
 ### PRODUCTION VS NON PRODUCTION WORKER MANAGEMENT 
-if 'REDIS_URL' in os.environ:
-    # Use Redis & Celery if REDIS_URL set as an env variable
-    from celery import Celery
-    celery_app = Celery(__name__, broker=os.environ['REDIS_URL'], backend=os.environ['REDIS_URL'])
-    background_callback_manager = CeleryManager(celery_app)
+# if 'REDIS_URL' in os.environ:
+#     # Use Redis & Celery if REDIS_URL set as an env variable
+#     from celery import Celery
+#     celery_app = Celery(__name__, broker=os.environ['REDIS_URL'], backend=os.environ['REDIS_URL'])
+#     background_callback_manager = CeleryManager(celery_app)
 
-else:
-    # Diskcache for non-production apps when developing locally
-    import diskcache
-    cache = diskcache.Cache("./cache")
-    background_callback_manager = DiskcacheManager(cache)
-
+# else:
+# Diskcache for non-production apps when developing locally
+import diskcache
+cache = diskcache.Cache("./cache")
+background_callback_manager = DiskcacheManager(cache)
 
 
 def list_dir(path):
@@ -42,9 +41,13 @@ app = Dash(__name__, background_callback_manager=background_callback_manager)
 Structure of this app: we define the data structures used in the algorithm (for e.g. the dictionary containing all parameters)
 as global variables, which can be modified by the callback functions
 '''
-no_file_flag = ""
-present_dir = [os.getcwd(), no_file_flag] #Global variable which will be modified during file selection
-results_output_folder = [""]
+
+cache['no_file_flag'] = ""
+cache['navigated_folder'] = os.getcwd()
+cache['navigated_file'] = cache['no_file_flag']
+# present_dir = [os.getcwd(), no_file_flag] #Global variable which will be modified during file selection
+# results_output_folder = [""]
+# cache['results_output_folder'] = ""
 
 mc_params = {
     'register':True,
@@ -60,7 +63,6 @@ mc_params = {
     'pw_rigid':True,
     'use_gSig_filt':False,
     'gSig_filt':[3,3],
-    
 }
 
 pmd_params = {
@@ -71,15 +73,33 @@ pmd_params = {
     'window_length':6000,
     'background_rank':15,
     'deconvolve':True,
-
 }
+
+localnmf_params = {
+        'num_passes':1,
+        'superpixels_corr_thr':[0.9, 0.75, 0.9, 0.86],
+        'length_cut':[3,5,2,2],
+        'th':[2,2,2,2],
+        'corr_th_fix':0.55,
+        'switch_point':5,
+        'corr_th_fix_sec':0.7,
+        'corr_th_del':0.2,
+        'max_allow_neuron_size':0.15,
+        'merge_corr_thr':0.7,
+        'merge_overlap_thr':0.7,
+        'r':20,
+}
+
+cache['mc_params'] = mc_params
+cache['pmd_params'] = pmd_params
+cache['localnmf_params'] = localnmf_params
 
 ### End of globally used data structures
 
 controls = [
     dcc.Dropdown(
         id="dropdown",
-        options=[{"label": x, "value": x} for x in list_dir(present_dir[0])],
+        options=[{"label": x, "value": x} for x in list_dir(cache['navigated_folder'])],
         value="",
     )
 ]
@@ -88,7 +108,7 @@ app.layout = html.Div(
     # [html.H1("File Selected: None"), html.Div(controls), html.Div(id="folder-files")]
     [html.H1("Please select a multipage tiff file using the dropdown below"),\
      html.H1("File Selected: None",id="folder-files"),\
-     html.H1("Current Folder: {}".format(present_dir), id="curr_folder"),\
+     html.H1("Current Folder: {}".format(cache['navigated_folder']), id="curr_folder"),\
      html.Div(controls), \
     ### Motion Correction Layout## 
      html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify paramters and hit SUBMIT to run"),\
@@ -122,22 +142,25 @@ def list_all_files(folder_name):
     folder_response = "Current Folder {}"
     default_value = ""
     
-    decided_path = os.path.normpath(os.path.join(present_dir[0], folder_name))
+    decided_path = os.path.normpath(os.path.join(cache['navigated_folder'], folder_name))
     is_file = os.path.isfile(decided_path)
     is_dir = os.path.isdir(decided_path)
 
     if is_file:
         #A file has been selected, need to update texts: 
         new_text = "File Selected: {}".format(folder_name)
-        current_folder = present_dir[0]
-        present_dir[1] = decided_path
+        current_folder = cache['navigated_folder']#present_dir[0]
+        # present_dir[1] = decided_path
+        cache['navigated_file'] = decided_path
         final_dir = [{"label": x, "value": x} for x in list_dir(current_folder)]
         return default_value, new_text, folder_response.format(current_folder), final_dir
     elif is_dir:
-        present_dir[1] = no_file_flag
-        present_dir[0] = decided_path
+        # present_dir[1] = cache['no_file_flag']
+        cache['navigated_file'] = cache['no_file_flag']
+        cache['navigated_folder'] = decided_path
+        # present_dir[0] = decided_path
         final_dir = [{"label": x, "value": x} for x in list_dir(decided_path)]
-        return default_value, "File Selected: None", folder_response.format(present_dir[0]), final_dir
+        return default_value, "File Selected: None", folder_response.format(cache['navigated_folder']), final_dir
     else:
         raise ValueError("Invalid suggestion")
 
@@ -160,8 +183,8 @@ def list_all_files(folder_name):
     prevent_initial_call=True
 )
 def register_and_compress_data(n_clicks):
-    data_folder = present_dir[0]
-    input_file = present_dir[1]
+    data_folder = cache['navigated_folder'] #present_dir[0]
+    input_file = cache['navigated_file'] #present_dir[1]
 
     from datetime import datetime
     import os
@@ -200,47 +223,50 @@ def register_and_compress_data(n_clicks):
 
 
     #NOTE: this data folder will also contain the location of the TestData
-    data_folder = set_and_create_folder_path(present_dir[1], present_dir[0])
-    results_output_folder[0] = data_folder
-    input_file = present_dir[1]
+    data_folder = set_and_create_folder_path(cache['navigated_file'], cache['navigated_folder'])
+    cache['save_folder'] = data_folder
+    # results_output_folder[0] = data_folder
+    # print("AFTER THE ASSIGNMENT FOR THE OUTPUT FOLDER THE RESULT OF RESULT OUTPUT FOLDER IS {}".format(results_output_folder[0]))
+    input_file = cache['navigated_file']#present_dir[1]
 
+    mc_params_dict = cache['mc_params']
 
-    register = mc_params['register']#True #@param {type:"boolean"}
+    register = mc_params_dict['register']#True #@param {type:"boolean"}
     # devel = True #@param {type:"boolean"}
-    devel = mc_params['devel']#True #never delete uploaded data
+    devel = mc_params_dict['devel']#True #never delete uploaded data
 
-    dx = mc_params['dx'] #2 #@param {type:"slider", min:0, max:100, step:1}
-    dy = mc_params['dy'] #2 #@param {type:"slider", min:0, max:100, step:1}
+    dx = mc_params_dict['dx'] #2 #@param {type:"slider", min:0, max:100, step:1}
+    dy = mc_params_dict['dy'] #2 #@param {type:"slider", min:0, max:100, step:1}
 
     dxy = (dx, dy)
 
-    max_shift_in_um_xdimension = mc_params['max_shift_in_um'][0]#50 #@param {type:"slider", min:0, max:200, step:1}
-    max_shift_in_um_ydimension = mc_params['max_shift_in_um'][1]#50 #@param {type:"slider", min:0, max:200, step:1}
+    max_shift_in_um_xdimension = mc_params_dict['max_shift_in_um'][0]#50 #@param {type:"slider", min:0, max:200, step:1}
+    max_shift_in_um_ydimension = mc_params_dict['max_shift_in_um'][1]#50 #@param {type:"slider", min:0, max:200, step:1}
 
     max_shift_um = (max_shift_in_um_xdimension, max_shift_in_um_ydimension)
 
-    max_deviation_rigid = mc_params['max_deviation_rigid'] #5 #@param {type:"slider", min:0, max:100, step:1}
+    max_deviation_rigid = mc_params_dict['max_deviation_rigid'] #5 #@param {type:"slider", min:0, max:100, step:1}
 
-    patch_motion_um_x = mc_params['patch_motion_um'][0] #17 #@param {type:"slider", min:0, max:200, step:1}
-    patch_motion_um_y = mc_params['patch_motion_um'][1] #17 #@param {type:"slider", min:0, max:200, step:1}
+    patch_motion_um_x = mc_params_dict['patch_motion_um'][0] #17 #@param {type:"slider", min:0, max:200, step:1}
+    patch_motion_um_y = mc_params_dict['patch_motion_um'][1] #17 #@param {type:"slider", min:0, max:200, step:1}
 
     patch_motion_um = (patch_motion_um_x, patch_motion_um_y)
 
-    overlaps_x = mc_params['overlaps'][0] #24 #@param {type:"slider", min:0, max:200, step:1}
-    overlaps_y = mc_params['overlaps'][1] #24 #@param {type:"slider", min:0, max:200, step:1}
+    overlaps_x = mc_params_dict['overlaps'][0] #24 #@param {type:"slider", min:0, max:200, step:1}
+    overlaps_y = mc_params_dict['overlaps'][1] #24 #@param {type:"slider", min:0, max:200, step:1}
 
     overlaps = (overlaps_x, overlaps_y)
 
     border_nan = 'copy'
 
-    niter_rig = mc_params['niter_rig'] #2 #@param {type:"slider", min:1, max:10, step:1}
-    niter_els = mc_params['niter_els'] #2 #@param {type:"slider", min:1, max:10, step:1}
+    niter_rig = mc_params_dict['niter_rig'] #2 #@param {type:"slider", min:1, max:10, step:1}
+    niter_els = mc_params_dict['niter_els'] #2 #@param {type:"slider", min:1, max:10, step:1}
 
-    pw_rigid = mc_params['pw_rigid'] #True #@param {type:"boolean"}
+    pw_rigid = mc_params_dict['pw_rigid'] #True #@param {type:"boolean"}
 
-    use_gSig_filt = mc_params['use_gSig_filt'] #False #@param {type:"boolean"}
-    gSig_filt_x = mc_params['gSig_filt'] #3 #@param {type:"slider", min:0, max:30, step:1}
-    gSig_filt_y = mc_params['gSig_filt'] #3 #@param {type:"slider", min:0, max:30, step:1}
+    use_gSig_filt = mc_params_dict['use_gSig_filt'] #False #@param {type:"boolean"}
+    gSig_filt_x = mc_params_dict['gSig_filt'] #3 #@param {type:"slider", min:0, max:30, step:1}
+    gSig_filt_y = mc_params_dict['gSig_filt'] #3 #@param {type:"slider", min:0, max:30, step:1}
     
     sketch_template = True
 
@@ -641,7 +667,7 @@ def register_and_compress_data(n_clicks):
 
     # Get data and config filenames from cmd line args
     data_name = input_file
-    outdir = results_output_folder[0]
+    outdir = cache['save_folder'] #results_output_folder[0]
     pathlib.Path(outdir).mkdir(parents=True, exist_ok=True)
 
     # Load User-Provided Params
@@ -680,14 +706,15 @@ def register_and_compress_data(n_clicks):
     ##########
   
     #NOTE: this data folder will also contain the location of the TestData
-    data_folder = results_output_folder[0]
+    data_folder = cache['save_folder'] #results_output_folder[0]
 
-    block_height = pmd_params['block_height'] #32 #@param {type:"slider", min:20, max:100, step:4}
-    block_width = pmd_params['block_width'] #32 #@param {type:"slider", min:20, max:100, step:4}
+    pmd_params_dict = cache['pmd_params']
+    block_height = pmd_params_dict['block_height'] #32 #@param {type:"slider", min:20, max:100, step:4}
+    block_width = pmd_params_dict['block_width'] #32 #@param {type:"slider", min:20, max:100, step:4}
     block_sizes = [block_height, block_width]
 
-    overlaps_height = pmd_params['overlaps_height'] #10 #@param {type:"slider", min:0, max:100, step:1}
-    overlaps_width = pmd_params['overlaps_width'] #10 #@param {type:"slider", min:0, max:100, step:1}
+    overlaps_height = pmd_params_dict['overlaps_height'] #10 #@param {type:"slider", min:0, max:100, step:1}
+    overlaps_width = pmd_params_dict['overlaps_width'] #10 #@param {type:"slider", min:0, max:100, step:1}
 
     if overlaps_height > block_height: 
         print("Overlaps height was set to be greater than block height, which is not valid")
@@ -702,7 +729,7 @@ def register_and_compress_data(n_clicks):
     overlap = [overlaps_height, overlaps_width]
 
 
-    window_length = pmd_params['window_length'] #6000 #@param {type:"integer"}
+    window_length = pmd_params_dict['window_length'] #6000 #@param {type:"integer"}
     if window_length <= 0:
         print("Window length cannot be negative! Resetting to 6000")
         window_length = 6000
@@ -710,7 +737,7 @@ def register_and_compress_data(n_clicks):
     end = window_length
 
     # background_rank = 0
-    background_rank = pmd_params['background_rank'] #15 #@param {type:"slider", min:0, max:100, step:1}
+    background_rank = pmd_params_dict['background_rank'] #15 #@param {type:"slider", min:0, max:100, step:1}
 
     # rank_prune_factor = 0.25 #@param {type:'slider', min:0, max:1, step:0.01}
 
@@ -943,222 +970,15 @@ def register_and_compress_data(n_clicks):
     ],
     prevent_initial_call=True
 )
-def demix_data():
+def demix_data(n_clicks):
     '''
-    Contains algorithm for maskNMF detection + demixing (or running superpixel + demixing)
+    Contains algorithm for ROI detection via maskNMF/superpixels + localnmf demixing (or running superpixel + demixing)
     '''
+    import localnmf_functions
+    from localnmf_functions import run_localnmf_demixing
+    print("results output folder before entering demix data is {}".format(cache['save_folder'])) #results_output_folder[0]))
+    run_localnmf_demixing(cache['save_folder'], cache['localnmf_params'])
     
-    demix_params = {
-        
-        
-        
-    }
-
-#NOTE: this data folder will also contain the location of the TestData
-data_folder = results_output_folder[0]
-
-## @markdown #Step 2 MaskNMF: Set parameter values for initializing the neural network (see documentation below)
-
-#Specify related parameters: 
-confidence = 0.5 #@param {type:"slider", min:0, max:1, step:0.01}
-allowed_overlap = 70 #@param {type:"slider", min:0, max:300, step:10}
-cpu_only = False #Whether to run net on CPU (very slow) or GPU
-# order = order #The default ordering of PMD outputs, specified in a previous block
-
-
-
-
-## @markdown #Step 3 MaskNMF: Specify the key parameter values for Mask R-CNN detection of neural signals (see documentation above)
-
-##PARAMETERS
-block_dims_x = 20 #@param {type:"slider", min:5, max:200, step:1}
-block_dims_y = 20 #@param {type:"slider", min:5, max:200, step:1}
-frame_len = 200 #@param {type:"slider", min:5, max:2000, step:5}
-#In each local spatial patch, we look at the "frame_len"-th brightest frames
-
-'''When we filter our large list of neurons, we use these 
-thresholds to discard similar neurons (to avoid over initializing the same cell)
-'''
-spatial_thresholds_1 = 0.3 #@param {type:"slider", min:0, max:1, step:0.01}
-spatial_thresholds_2 = 0.3 #@param {type:"slider", min:0, max:1, step:0.01}
-
-spatial_thresholds = [spatial_thresholds_1, spatial_thresholds_2]
-
-
-
-def run_masknmf(data_folder, input_file, confidence, allowed_overlap, cpu_only,\
-                block_dims_x, block_dims_y, frame_len, spatial_thresholds):
-
-  import torch
-  import torch_sparse
-  import sys
-
-  import copy
-  #Misc imports
-  import matplotlib.pyplot as plt
-  import matplotlib.cm as cm
-  import matplotlib as mpl
-  import colorsys
-  from matplotlib import patches,  lines
-  from matplotlib.patches import Polygon
-  import shutil
-  import time
-  import os
-  import matplotlib.pyplot as plt
-  import numpy as np
-  from skimage import io
-  import skimage
-  from skimage import measure
-  from skimage import filters
-
-  import random
-  import numpy as np
-  import os
-  import skimage.io as io
-
-  import torch_sparse
-
-  import scipy
-  import scipy.sparse
-
-  #Ring-LocalNMF specific imports
-  from localnmf import superpixel_analysis_ring
-
-
-  import boto3
-  from botocore.config import Config
-  from botocore import UNSIGNED
-
-  from masknmf.engine.segmentation import segment_local_UV, filter_components_UV
-  from masknmf.detection.maskrcnn_detector import maskrcnn_detector
-
-  input_file = os.path.join(data_folder, "decomposition.npz")
-
-  data = np.load(input_file, allow_pickle=True)
-
-  U_sparse = scipy.sparse.csr_matrix(
-          (data['U_data'], data['U_indices'], data['U_indptr']),
-          shape=data['U_shape']
-      ).tocoo()
-
-  order = data.get('fov_order', np.array("C")).item()
-  U = np.array(U_sparse.todense())
-  shape = data['U_shape']
-  d1,d2 = data['fov_shape']
-  R = data['R']
-  s = data['s']
-  Vt = data['Vt']
-  T = Vt.shape[1]
-  V_full = R.dot(s[:, None] *Vt)
-  V = V_full
-  dims = (d1, d2, T)
-  U_r = U.reshape((d1, d2,-1), order=order)
-
-
-  #This is where we create the neural network
-  dir_path = "neuralnet_info" 
-
-  #Specify where to save these outputs
-  MASK_NMF_CONFIG = os.path.join(dir_path, "config_nn.yaml")
-  MASK_NMF_MODEL = os.path.join(dir_path, "model_final.pth")
-
-  #Specify where to retrieve the neural net data. In this case, in the apasarkar-public bucket on AWS S3
-  bucket_loc = "apasarkar-public"
-  config_file_name = "config.yaml"
-  weights_file_name = "model_final.pth"
-
-
-
-  if not os.path.isdir("neuralnet_info"):
-      os.mkdir("neuralnet_info")
-      
-
-  s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
-  s3.download_file(bucket_loc,
-                  config_file_name,
-                  MASK_NMF_CONFIG)
-  s3.download_file(bucket_loc,
-                  weights_file_name,
-                  MASK_NMF_MODEL)
-
-
-
-  model = maskrcnn_detector(MASK_NMF_MODEL,
-                                MASK_NMF_CONFIG,
-                                confidence,
-                                allowed_overlap,
-                                cpu_only, order=order)
-
-  temporal_components = data.get('deconvolved_temporal')
-  mixing_weights = data['R']
-
-  ##END OF PARAMETER DEFINITION
-
-
-
-  if temporal_components is None:
-      raise ValueError("Deconvolution was not run on this PMD output. Re-run PMD with deconv")
-
-
-  # Run Detection On Select Frames
-  print("Performing MaskRCNN detection...")
-  bin_masks, footprints, properties, _ = segment_local_UV(
-      U_sparse,
-      mixing_weights,
-      temporal_components,
-      tuple((d1, d2, temporal_components.shape[-1])),
-      model,
-      frame_len,
-      block_size=(block_dims_x, block_dims_y),
-      order=order
-  )
-
-  print("Filtering detected components...")
-  keep_masks = filter_components_UV(
-          footprints, bin_masks, properties,
-          spatial_thresholds[0], spatial_thresholds[1])
-  print(f"Filtering completed {keep_masks.shape} of {np.count_nonzero(keep_masks)} components retained")
-
-  a_dense = np.asarray(footprints[:, keep_masks].todense())
-  a = a_dense.reshape((d1, d2, -1), order=order)
-
-  return a
-
-try: 
-
-  import torch
-  import jax
-  torch.cuda.empty_cache()
-  jax.clear_backends()
-
-
-  a = run_masknmf(data_folder, input_file, confidence, allowed_overlap, cpu_only,\
-                block_dims_x, block_dims_y, frame_len, spatial_thresholds)
-  
-
-
-  torch.cuda.empty_cache()
-  jax.clear_backends()
-
-except KeyboardException:
-  display("\n \n \n")
-  display("-------- ERROR GENERATED----------")
-  display("The user manually ended the program execution. Please re-run this code block.")
-  import torch
-  import jax
-  torch.cuda.empty_cache()
-  jax.clear_backends()
-  display("Memory Cleared, Ready to Re-Run")
-except:
-  display("\n \n \n")
-  display("-------- ERROR GENERATED----------")
-  display("Miscellaneous Error, please try to re-run.")
-  import torch
-  import jax
-  torch.cuda.empty_cache()
-  jax.clear_backends()
-  display("Memory Cleared, Ready to Re-Run")
-
 
 
 

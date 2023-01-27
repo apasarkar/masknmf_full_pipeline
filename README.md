@@ -25,4 +25,4 @@ Coming soon
 
 
 ## General notes (to formalize soon)
-Make sure pip install dash but also pip install "dash[diskcache]" so that you can run the app.
+Make sure pip install dash but also pip install "dash[diskcache]" so that you can run the app. Also pip install dash-extensions and flask-caching (pip install Flask-Caching)
