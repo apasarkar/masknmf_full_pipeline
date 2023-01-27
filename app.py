@@ -37,9 +37,34 @@ def list_dir(path):
 
 app = Dash(__name__, background_callback_manager=background_callback_manager)
 
-
+##Globally used data structures/info
+'''
+Structure of this app: we define the data structures used in the algorithm (for e.g. the dictionary containing all parameters)
+as global variables, which can be modified by the callback functions
+'''
 no_file_flag = ""
 present_dir = [os.getcwd(), no_file_flag] #Global variable which will be modified during file selection
+results_output_folder = [""]
+
+mc_params = {
+    'register':True,
+    'dx':2,
+    'dy':2,
+    'devel':True,
+    'max_shift_in_um':[50,50],
+    'max_deviation_rigid':5,
+    'patch_motion_um':[17,17],
+    'overlaps':[24,24],
+    'niter_rig':2,
+    'niter_els':2,
+    'pw_rigid':True,
+    'use_gSig_filt':False,
+    'gSig_filt':[3,3],
+    
+}
+
+
+### End of globally used data structures
 
 controls = [
     dcc.Dropdown(
@@ -56,7 +81,7 @@ app.layout = html.Div(
      html.H1("Current Folder: {}".format(present_dir), id="curr_folder"),\
      html.Div(controls), \
     ### Motion Correction Layout## 
-     html.H1("Step 1: Motion Correction. Specify paramters and hit SUBMIT to run"),\
+     html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify paramters and hit SUBMIT to run"),\
      html.Div(
             [
                 html.Div(id='placeholder', children=""),
@@ -64,17 +89,8 @@ app.layout = html.Div(
             ]
         ),\
      html.Button(id="button_id", children="Run Job!"),\
-     ### LocalMD## 
-     html.H1("Step 2: PMD Compression+Denoising. Specify paramters and hit SUBMIT to run"),\
-     html.Div(
-            [
-                html.Div(id='placeholder_pmd', children=""),
-                # html.Progress(id="progress_bar", value="0"),
-            ]
-        ),\
-     html.Button(id="button_id_pmd", children="Run Job!"),\
      ### Demixing ### 
-     html.H1("Step 3: Demixing. Specify paramters and hit SUBMIT to run"),\
+     html.H1("Step 2: Demixing. Specify paramters and hit SUBMIT to run"),\
      html.Div(
             [
                 html.Div(id='placeholder_demix', children=""),
@@ -115,7 +131,8 @@ def list_all_files(folder_name):
     else:
         raise ValueError("Invalid suggestion")
 
-## MOTION CORRECTION CALLBACKS
+## MOTION CORRECTION + PMD COMPRESSION CALLBACKS
+
 
 @dash.callback(
     output=Output("placeholder", "children"),
@@ -132,7 +149,7 @@ def list_all_files(folder_name):
     # progress=[Output("progress_bar", "value"), Output("progress_bar", "max")],
     prevent_initial_call=True
 )
-def register_data(n_clicks):
+def register_and_compress_data(n_clicks):
     data_folder = present_dir[0]
     input_file = present_dir[1]
 
@@ -158,7 +175,7 @@ def register_data(n_clicks):
         now = datetime.now()
 
         # dd/mm/YY H:M:S
-        dt_string = now.strftime(filename + "_results_%d_%m_%Y_%H_%M_%S")
+        dt_string = now.strftime(filename + "_DASH_results_%d_%m_%Y_%H_%M_%S")
         print(dt_string)	
         return dt_string
 
@@ -174,46 +191,47 @@ def register_data(n_clicks):
 
     #NOTE: this data folder will also contain the location of the TestData
     data_folder = set_and_create_folder_path(present_dir[1], present_dir[0])
+    results_output_folder[0] = data_folder
     input_file = present_dir[1]
 
 
-    register = True #@param {type:"boolean"}
+    register = mc_params['register']#True #@param {type:"boolean"}
     # devel = True #@param {type:"boolean"}
-    devel = True #never delete uploaded data
+    devel = mc_params['devel']#True #never delete uploaded data
 
-    dx = 2 #@param {type:"slider", min:0, max:100, step:1}
-    dy = 2 #@param {type:"slider", min:0, max:100, step:1}
+    dx = mc_params['dx'] #2 #@param {type:"slider", min:0, max:100, step:1}
+    dy = mc_params['dy'] #2 #@param {type:"slider", min:0, max:100, step:1}
 
     dxy = (dx, dy)
 
-    max_shift_in_um_xdimension = 50 #@param {type:"slider", min:0, max:200, step:1}
-    max_shift_in_um_ydimension = 50 #@param {type:"slider", min:0, max:200, step:1}
+    max_shift_in_um_xdimension = mc_params['max_shift_in_um'][0]#50 #@param {type:"slider", min:0, max:200, step:1}
+    max_shift_in_um_ydimension = mc_params['max_shift_in_um'][1]#50 #@param {type:"slider", min:0, max:200, step:1}
 
     max_shift_um = (max_shift_in_um_xdimension, max_shift_in_um_ydimension)
 
-    max_deviation_rigid = 5 #@param {type:"slider", min:0, max:100, step:1}
+    max_deviation_rigid = mc_params['max_deviation_rigid'] #5 #@param {type:"slider", min:0, max:100, step:1}
 
-    patch_motion_um_x = 17 #@param {type:"slider", min:0, max:200, step:1}
-    patch_motion_um_y = 17 #@param {type:"slider", min:0, max:200, step:1}
+    patch_motion_um_x = mc_params['patch_motion_um'][0] #17 #@param {type:"slider", min:0, max:200, step:1}
+    patch_motion_um_y = mc_params['patch_motion_um'][1] #17 #@param {type:"slider", min:0, max:200, step:1}
 
     patch_motion_um = (patch_motion_um_x, patch_motion_um_y)
 
-    overlaps_x = 24 #@param {type:"slider", min:0, max:200, step:1}
-    overlaps_y = 24 #@param {type:"slider", min:0, max:200, step:1}
+    overlaps_x = mc_params['overlaps'][0] #24 #@param {type:"slider", min:0, max:200, step:1}
+    overlaps_y = mc_params['overlaps'][1] #24 #@param {type:"slider", min:0, max:200, step:1}
 
     overlaps = (overlaps_x, overlaps_y)
 
     border_nan = 'copy'
 
-    niter_rig = 2 #@param {type:"slider", min:1, max:10, step:1}
-    niter_els = 2 #@param {type:"slider", min:1, max:10, step:1}
+    niter_rig = mc_params['niter_rig'] #2 #@param {type:"slider", min:1, max:10, step:1}
+    niter_els = mc_params['niter_els'] #2 #@param {type:"slider", min:1, max:10, step:1}
 
-    pw_rigid = True #@param {type:"boolean"}
+    pw_rigid = mc_params['pw_rigid'] #True #@param {type:"boolean"}
 
-    use_gSig_filt = False #@param {type:"boolean"}
-    gSig_filt_x = 3 #@param {type:"slider", min:0, max:30, step:1}
-    gSig_filt_y = 3 #@param {type:"slider", min:0, max:30, step:1}
-
+    use_gSig_filt = mc_params['use_gSig_filt'] #False #@param {type:"boolean"}
+    gSig_filt_x = mc_params['gSig_filt'] #3 #@param {type:"slider", min:0, max:30, step:1}
+    gSig_filt_y = mc_params['gSig_filt'] #3 #@param {type:"slider", min:0, max:30, step:1}
+    
     sketch_template = True
 
     if use_gSig_filt: 
@@ -613,7 +631,7 @@ def register_data(n_clicks):
 
     # Get data and config filenames from cmd line args
     data_name = input_file
-    outdir = data_folder
+    outdir = results_output_folder[0]
     pathlib.Path(outdir).mkdir(parents=True, exist_ok=True)
 
     # Load User-Provided Params
@@ -643,6 +661,293 @@ def register_data(n_clicks):
         import jax
         jax.clear_backends()
 
+    ##########
+    ##
+    ##
+    ## PMD Compression + Denoising portion
+    ##
+    ##
+    ##########
+    
+
+    pmd_params = {
+        'block_height':32,
+        'block_width':32,
+        'overlaps_height':10,
+        'overlaps_width':10,
+        'window_length':6000,
+        'background_rank':15,
+        'deconvolve':True,
+        
+    }
+
+    
+    #NOTE: this data folder will also contain the location of the TestData
+    data_folder = results_output_folder[0]
+
+    block_height = pmd_params['block_height'] #32 #@param {type:"slider", min:20, max:100, step:4}
+    block_width = pmd_params['block_width'] #32 #@param {type:"slider", min:20, max:100, step:4}
+    block_sizes = [block_height, block_width]
+
+    overlaps_height = pmd_params['overlaps_height'] #10 #@param {type:"slider", min:0, max:100, step:1}
+    overlaps_width = pmd_params['overlaps_width'] #10 #@param {type:"slider", min:0, max:100, step:1}
+
+    if overlaps_height > block_height: 
+        print("Overlaps height was set to be greater than block height, which is not valid")
+        print("Setting overlaps to be 5")
+        overlaps_height = 5
+
+    if overlaps_width > block_width:
+        print("Overlaps width was set to be greater than width height, which is not valid \
+        Setting overlaps to be 5")
+        overlaps_width = 5
+
+    overlap = [overlaps_height, overlaps_width]
+
+
+    window_length = pmd_params['window_length'] #6000 #@param {type:"integer"}
+    if window_length <= 0:
+        print("Window length cannot be negative! Resetting to 6000")
+        window_length = 6000
+    start = 0
+    end = window_length
+
+    # background_rank = 0
+    background_rank = pmd_params['background_rank'] #15 #@param {type:"slider", min:0, max:100, step:1}
+
+    # rank_prune_factor = 0.25 #@param {type:'slider', min:0, max:1, step:0.01}
+
+    deconvolve=True
+    deconv_batch=1000
+    # deconvolve=True #@param {type:'boolean'}
+    # deconv_batch=1000  #@param {type:'slider', min:1000, max:30000, step:1000}
+
+    ###THESE PARAMS ARE NOT MODIFIED
+    # num_sims = 64
+    sim_conf = 5
+    max_rank_per_block = 40 #@param {type:"slider", min:5, max:50, step:1}
+
+    #@markdown Keep run_deconv true unless you do not want to run maskNMF demixing
+    run_deconv = True #@param {type:'boolean'}
+    max_components = max_rank_per_block
+
+    INPUT_PARAMS = {
+        # Caiman Internal:
+        'localmd':{'block_height':block_height,
+        'block_width':block_width,
+        'overlaps_height':overlaps_height,
+        'overlaps_width':overlaps_width,
+        'window_length':window_length,
+        'background_rank':background_rank,
+        'max_rank_per_block':max_rank_per_block,
+        'run_deconv':run_deconv 
+        }
+    }
+
+
+    ## PMD: Run the matrix decomposition pipeline 
+
+    ##TODO: Add apriori SVD option
+    block_sizes = block_sizes
+    overlap = overlap
+
+    def load_config(default):
+        """
+        Loads user-provided yaml file containing parameters key-value pairs.
+        Omitted optional parameter keys are filled with default values.
+        Parameters
+        ----------
+        filename : string
+            Full path + name of config 'yaml' file.
+        Returns
+        -------
+        params : dict
+            Parameter key-value pairs.
+        """
+
+        params = dict()
+        # Insert default values for missing optional fields
+        display('Inserting defaults for missing optional arguments')
+        for group, group_params in default.items():
+            display(f"Using all defaults in group '{group}={group_params}'")
+            params[group] = group_params
+        display("Config file successfully loaded.")
+        return flatten(params)
+
+
+    def write_params(filename, required={}, default={}, **params):
+        """
+        Writes verbose parameter dictionary containing all default, modified, and
+        simulated fields to a specified output location.
+        Parameters
+        ----------
+        filename : string
+            Full path + name for destination of output config file.
+        params : dict
+            User-provided parameter key-value pairs to be written.
+        Returns
+        -------
+        None :
+        """
+
+        # Construct Mapping Of Keys -> Categories
+        reverse_map = {}
+        for group, keys in required.items():
+            for key in keys:
+                reverse_map[key] = group
+        for group, group_params in default.items():
+            for key, _ in group_params.items():
+                reverse_map[key] = group
+
+        # Undo Flattening
+        grouped_params = {'unused': {}}
+        for group, _ in required.items():
+            grouped_params[group] = {}
+        for group, _ in default.items():
+            grouped_params[group] = {}
+        for key, val in params.items():
+            try:
+                grouped_params[reverse_map[key]][key] = val
+            except KeyError:
+                grouped_params['unused'][key] = val
+
+        # Write Output
+        display(f"Writing verbose config to ({filename})...")
+        with open(filename, 'w') as stream:
+            yaml.dump(grouped_params, stream, default_flow_style=False)
+        display("Verbose config written successfully.")
+
+
+    def perform_localmd_pipeline(input_file, block_sizes, overlap, frame_range, background_rank, \
+                            max_components, sim_conf, \
+                             tiff_batch_size,deconv_batch, folder, run_deconv=True, pixel_batch_size=100,\
+                            batching=5, dtype="float32",  order="F", corrector = None):
+
+        from localmd.decomposition import localmd_decomposition, display
+        from masknmf.engine.sparsify import get_factorized_projection
+        import localmd.tiff_loader as tiff_loader
+        import scipy
+        import scipy.sparse
+        import jax
+        import jax.scipy
+        import jax.numpy as jnp
+        import numpy as np
+        from jax import jit, vmap
+        import functools
+        from functools import partial
+        import time
+
+        start, end = frame_range[0], frame_range[1]
+
+
+        #Reshape U using order="F" here
+        U, R, s, V, tiff_loader_obj = localmd_decomposition(input_file, block_sizes, overlap, [start, end], \
+                                        max_components=max_components, background_rank = background_rank, sim_conf=sim_conf,\
+                                         tiff_batch_size=tiff_batch_size,pixel_batch_size=pixel_batch_size, batching=batching, dtype=dtype, order=order, \
+                                         num_workers=0, frame_corrector_obj = corrector)
+
+
+        ## Step 2h: Run deconvolution:
+        limit = 5000
+        if run_deconv:
+            np.savez("Deconvolution_Testing.npz", U=U, R=R, s=s, V=V, batch_size=deconv_batch, allow_pickle=True)
+            deconv_components = get_factorized_projection(
+              U,
+              R,
+              s[:, None] * V[:, :limit],
+              batch_size=deconv_batch
+          )
+        else:
+            display("WARNING: YOU ARE NOT USING THE DECONVOLUTION STEP, MASKNMF WILL NOT PERFORM AS WELL.")
+            deconv_components = s[:, None] * V[:, :limit]
+
+
+        def save_decomposition(U, R, s, V, deconvolved_temporal, load_obj, folder, order="F"):
+            file_name = "decomposition.npz"
+            final_path = os.path.join(folder, file_name)
+
+            np.savez(final_path, fov_shape = load_obj.shape[:2], \
+                fov_order=order, U_data = U.data, \
+                U_indices = U.indices,\
+                U_indptr=U.indptr, \
+                U_shape = U.shape, \
+                U_format = type(U), \
+                R = R, \
+                s = s, \
+                Vt = V, \
+                deconvolved_temporal=deconvolved_temporal, \
+                 mean_img = tiff_loader_obj.mean_img, \
+                 noise_var_img = tiff_loader_obj.std_img)
+
+            display("the decomposition.npz file is saved at {}".format(folder))
+
+
+        ##Step 2i: Save the results: 
+        save_decomposition(U.tocsr(), R, s, V, deconv_components, tiff_loader_obj, folder, order=order)
+
+
+
+    tiff_batch_size = 1000
+    try:
+        import jax
+        import torch
+        jax.clear_backends()
+        torch.cuda.empty_cache()
+        params = load_config(INPUT_PARAMS)
+        print(params)
+        write_params(os.path.join(outdir, "CompressionConfig.yaml"),
+                    default=INPUT_PARAMS,
+                    **params)
+
+        import localmd
+        from localmd.decomposition import threshold_heuristic
+        from localmd import tiff_loader
+        from jnormcorre.motion_correction import frame_corrector 
+        from masknmf.engine.sparsify import get_factorized_projection
+        pmdresults = perform_localmd_pipeline(input_file, block_sizes, overlap, [start, end], background_rank, \
+                              max_components, sim_conf, tiff_batch_size,deconv_batch,data_folder, pixel_batch_size=100, run_deconv=run_deconv,\
+                              batching=5, dtype="float32",  order="F", corrector = corrector)
+        torch.cuda.empty_cache()
+        jax.clear_backends() 
+    except FileNotFoundError:
+        print("\n \n \n")
+        display("--------ERROR GENERATED, DETAILS BELOW-----")
+        display("The file was not located. Please consider specifying the file again (step 0) and run the entire pipeline from the start\
+        (Motion Correction)")
+        import jax
+        import torch
+        jax.clear_backends()
+        torch.cuda.empty_cache()
+        display("Cleared memory")
+    except Exception as e:
+        print("\n \n \n")
+        display("--------ERROR GENERATED, DETAILS BELOW-----")
+        display("Unexpected error, please report")
+        import jax
+        import torch
+        jax.clear_backends()
+        torch.cuda.empty_cache()
+        display("Cleared backends")
+        print(e)
+        display("Please re-run the pipeline starting from motion correction.")
+
+
+@dash.callback(
+    output=Output("placeholder", "children"),
+    inputs=Input("button_id", "n_clicks"),
+    background=True,
+    running=[
+        (Output("button_id", "disabled"), True, False),
+        (
+            Output("placeholder", "style"),
+            {"visibility": "hidden"},
+            {"visibility": "visible"},
+        ),
+    ],
+    prevent_initial_call=True
+)
+def demix_data():
+    
 
 
 
