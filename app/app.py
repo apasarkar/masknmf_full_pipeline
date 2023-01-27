@@ -63,6 +63,16 @@ mc_params = {
     
 }
 
+pmd_params = {
+    'block_height':32,
+    'block_width':32,
+    'overlaps_height':10,
+    'overlaps_width':10,
+    'window_length':6000,
+    'background_rank':15,
+    'deconvolve':True,
+
+}
 
 ### End of globally used data structures
 
@@ -668,20 +678,7 @@ def register_and_compress_data(n_clicks):
     ##
     ##
     ##########
-    
-
-    pmd_params = {
-        'block_height':32,
-        'block_width':32,
-        'overlaps_height':10,
-        'overlaps_width':10,
-        'window_length':6000,
-        'background_rank':15,
-        'deconvolve':True,
-        
-    }
-
-    
+  
     #NOTE: this data folder will also contain the location of the TestData
     data_folder = results_output_folder[0]
 
@@ -933,13 +930,13 @@ def register_and_compress_data(n_clicks):
 
 
 @dash.callback(
-    output=Output("placeholder", "children"),
-    inputs=Input("button_id", "n_clicks"),
+    output=Output("placeholder_demix", "children"),
+    inputs=Input("button_id_demix", "n_clicks"),
     background=True,
     running=[
-        (Output("button_id", "disabled"), True, False),
+        (Output("button_id_demix", "disabled"), True, False),
         (
-            Output("placeholder", "style"),
+            Output("placeholder_demix", "style"),
             {"visibility": "hidden"},
             {"visibility": "visible"},
         ),
@@ -947,7 +944,221 @@ def register_and_compress_data(n_clicks):
     prevent_initial_call=True
 )
 def demix_data():
+    '''
+    Contains algorithm for maskNMF detection + demixing (or running superpixel + demixing)
+    '''
     
+    demix_params = {
+        
+        
+        
+    }
+
+#NOTE: this data folder will also contain the location of the TestData
+data_folder = results_output_folder[0]
+
+## @markdown #Step 2 MaskNMF: Set parameter values for initializing the neural network (see documentation below)
+
+#Specify related parameters: 
+confidence = 0.5 #@param {type:"slider", min:0, max:1, step:0.01}
+allowed_overlap = 70 #@param {type:"slider", min:0, max:300, step:10}
+cpu_only = False #Whether to run net on CPU (very slow) or GPU
+# order = order #The default ordering of PMD outputs, specified in a previous block
+
+
+
+
+## @markdown #Step 3 MaskNMF: Specify the key parameter values for Mask R-CNN detection of neural signals (see documentation above)
+
+##PARAMETERS
+block_dims_x = 20 #@param {type:"slider", min:5, max:200, step:1}
+block_dims_y = 20 #@param {type:"slider", min:5, max:200, step:1}
+frame_len = 200 #@param {type:"slider", min:5, max:2000, step:5}
+#In each local spatial patch, we look at the "frame_len"-th brightest frames
+
+'''When we filter our large list of neurons, we use these 
+thresholds to discard similar neurons (to avoid over initializing the same cell)
+'''
+spatial_thresholds_1 = 0.3 #@param {type:"slider", min:0, max:1, step:0.01}
+spatial_thresholds_2 = 0.3 #@param {type:"slider", min:0, max:1, step:0.01}
+
+spatial_thresholds = [spatial_thresholds_1, spatial_thresholds_2]
+
+
+
+def run_masknmf(data_folder, input_file, confidence, allowed_overlap, cpu_only,\
+                block_dims_x, block_dims_y, frame_len, spatial_thresholds):
+
+  import torch
+  import torch_sparse
+  import sys
+
+  import copy
+  #Misc imports
+  import matplotlib.pyplot as plt
+  import matplotlib.cm as cm
+  import matplotlib as mpl
+  import colorsys
+  from matplotlib import patches,  lines
+  from matplotlib.patches import Polygon
+  import shutil
+  import time
+  import os
+  import matplotlib.pyplot as plt
+  import numpy as np
+  from skimage import io
+  import skimage
+  from skimage import measure
+  from skimage import filters
+
+  import random
+  import numpy as np
+  import os
+  import skimage.io as io
+
+  import torch_sparse
+
+  import scipy
+  import scipy.sparse
+
+  #Ring-LocalNMF specific imports
+  from localnmf import superpixel_analysis_ring
+
+
+  import boto3
+  from botocore.config import Config
+  from botocore import UNSIGNED
+
+  from masknmf.engine.segmentation import segment_local_UV, filter_components_UV
+  from masknmf.detection.maskrcnn_detector import maskrcnn_detector
+
+  input_file = os.path.join(data_folder, "decomposition.npz")
+
+  data = np.load(input_file, allow_pickle=True)
+
+  U_sparse = scipy.sparse.csr_matrix(
+          (data['U_data'], data['U_indices'], data['U_indptr']),
+          shape=data['U_shape']
+      ).tocoo()
+
+  order = data.get('fov_order', np.array("C")).item()
+  U = np.array(U_sparse.todense())
+  shape = data['U_shape']
+  d1,d2 = data['fov_shape']
+  R = data['R']
+  s = data['s']
+  Vt = data['Vt']
+  T = Vt.shape[1]
+  V_full = R.dot(s[:, None] *Vt)
+  V = V_full
+  dims = (d1, d2, T)
+  U_r = U.reshape((d1, d2,-1), order=order)
+
+
+  #This is where we create the neural network
+  dir_path = "neuralnet_info" 
+
+  #Specify where to save these outputs
+  MASK_NMF_CONFIG = os.path.join(dir_path, "config_nn.yaml")
+  MASK_NMF_MODEL = os.path.join(dir_path, "model_final.pth")
+
+  #Specify where to retrieve the neural net data. In this case, in the apasarkar-public bucket on AWS S3
+  bucket_loc = "apasarkar-public"
+  config_file_name = "config.yaml"
+  weights_file_name = "model_final.pth"
+
+
+
+  if not os.path.isdir("neuralnet_info"):
+      os.mkdir("neuralnet_info")
+      
+
+  s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
+  s3.download_file(bucket_loc,
+                  config_file_name,
+                  MASK_NMF_CONFIG)
+  s3.download_file(bucket_loc,
+                  weights_file_name,
+                  MASK_NMF_MODEL)
+
+
+
+  model = maskrcnn_detector(MASK_NMF_MODEL,
+                                MASK_NMF_CONFIG,
+                                confidence,
+                                allowed_overlap,
+                                cpu_only, order=order)
+
+  temporal_components = data.get('deconvolved_temporal')
+  mixing_weights = data['R']
+
+  ##END OF PARAMETER DEFINITION
+
+
+
+  if temporal_components is None:
+      raise ValueError("Deconvolution was not run on this PMD output. Re-run PMD with deconv")
+
+
+  # Run Detection On Select Frames
+  print("Performing MaskRCNN detection...")
+  bin_masks, footprints, properties, _ = segment_local_UV(
+      U_sparse,
+      mixing_weights,
+      temporal_components,
+      tuple((d1, d2, temporal_components.shape[-1])),
+      model,
+      frame_len,
+      block_size=(block_dims_x, block_dims_y),
+      order=order
+  )
+
+  print("Filtering detected components...")
+  keep_masks = filter_components_UV(
+          footprints, bin_masks, properties,
+          spatial_thresholds[0], spatial_thresholds[1])
+  print(f"Filtering completed {keep_masks.shape} of {np.count_nonzero(keep_masks)} components retained")
+
+  a_dense = np.asarray(footprints[:, keep_masks].todense())
+  a = a_dense.reshape((d1, d2, -1), order=order)
+
+  return a
+
+try: 
+
+  import torch
+  import jax
+  torch.cuda.empty_cache()
+  jax.clear_backends()
+
+
+  a = run_masknmf(data_folder, input_file, confidence, allowed_overlap, cpu_only,\
+                block_dims_x, block_dims_y, frame_len, spatial_thresholds)
+  
+
+
+  torch.cuda.empty_cache()
+  jax.clear_backends()
+
+except KeyboardException:
+  display("\n \n \n")
+  display("-------- ERROR GENERATED----------")
+  display("The user manually ended the program execution. Please re-run this code block.")
+  import torch
+  import jax
+  torch.cuda.empty_cache()
+  jax.clear_backends()
+  display("Memory Cleared, Ready to Re-Run")
+except:
+  display("\n \n \n")
+  display("-------- ERROR GENERATED----------")
+  display("Miscellaneous Error, please try to re-run.")
+  import torch
+  import jax
+  torch.cuda.empty_cache()
+  jax.clear_backends()
+  display("Memory Cleared, Ready to Re-Run")
+
 
 
 
