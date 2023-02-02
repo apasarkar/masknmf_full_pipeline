@@ -13,6 +13,7 @@ import time
 import datetime
 from dash import DiskcacheManager, CeleryManager, Input, Output, html
 import shutil
+import numpy as np
 
 ### PRODUCTION VS NON PRODUCTION WORKER MANAGEMENT 
 # if 'REDIS_URL' in os.environ:
@@ -94,6 +95,15 @@ cache['mc_params'] = mc_params
 cache['pmd_params'] = pmd_params
 cache['localnmf_params'] = localnmf_params
 
+
+img = np.random.rand(3,250,250)
+fig_mc_pmd_plots = px.imshow(img, facet_col=0)
+fig_mc_pmd_plots.update(layout_coloraxis_showscale=False)
+
+img_name_list = ["Motion Corrected", "PMD Denoised", "PMD Noise Variance Image"]
+for i, name in enumerate(img_name_list):
+    fig_mc_pmd_plots.layout.annotations[i]['text'] = name
+
 ### End of globally used data structures
 
 controls = [
@@ -112,13 +122,16 @@ app.layout = html.Div(
      html.Div(controls), \
     ### Motion Correction Layout## 
      html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify paramters and hit SUBMIT to run"),\
+     dcc.Graph(
+        id='example-graph',
+        figure=fig_mc_pmd_plots
+     ),\
+     html.Button(id="button_id", children="Run Job!"),\
      html.Div(
             [
                 html.Div(id='placeholder', children=""),
-                # html.Progress(id="progress_bar", value="0"),
             ]
         ),\
-     html.Button(id="button_id", children="Run Job!"),\
      ### Demixing ### 
      html.H1("Step 2: Demixing. Specify paramters and hit SUBMIT to run"),\
      html.Div(
