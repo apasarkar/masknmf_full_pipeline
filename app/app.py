@@ -95,12 +95,14 @@ cache['mc_params'] = mc_params
 cache['pmd_params'] = pmd_params
 cache['localnmf_params'] = localnmf_params
 
+random_data_temp = np.random.rand(3,50,50,100)
 
-img = np.random.rand(3,250,250)
+img = np.random.rand(3,50,50)
 fig_mc_pmd_plots = px.imshow(img, facet_col=0)
 fig_mc_pmd_plots.update(layout_coloraxis_showscale=False)
 
-img_name_list = ["Motion Corrected", "PMD Denoised", "PMD Noise Variance Image"]
+# img_name_list = ["Motion Corrected", "PMD Denoised", "PMD Noise Variance Image"]
+img_name_list = ["No Results Yet", "No Results Yet", "No Results Yet"]
 for i, name in enumerate(img_name_list):
     fig_mc_pmd_plots.layout.annotations[i]['text'] = name
 
@@ -111,21 +113,24 @@ controls = [
         id="dropdown",
         options=[{"label": x, "value": x} for x in list_dir(cache['navigated_folder'])],
         value="",
+        style={'width':'50%', 'margin-top':'20px'},
     )
 ]
 
 app.layout = html.Div(
     # [html.H1("File Selected: None"), html.Div(controls), html.Div(id="folder-files")]
-    [html.H1("Please select a multipage tiff file using the dropdown below"),\
+    [html.H1("Please select a multipage tiff file using the dropdown below", style={'margin-top':'20px'}),\
      html.H1("File Selected: None",id="folder-files"),\
      html.H1("Current Folder: {}".format(cache['navigated_folder']), id="curr_folder"),\
      html.Div(controls), \
     ### Motion Correction Layout## 
-     html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify paramters and hit SUBMIT to run"),\
+     html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify parameters and hit SUBMIT to run"),\
      dcc.Graph(
         id='example-graph',
         figure=fig_mc_pmd_plots
      ),\
+     dash.dcc.Slider(id='pmd_mc_slider',min=0,max=random_data_temp.shape[3],marks=None,updatemode='drag',step=1,\
+                     value=np.argmin(np.abs(random_data_temp.shape[3]-1))),\
      html.Button(id="button_id", children="Run Job!"),\
      html.Div(
             [
@@ -144,6 +149,50 @@ app.layout = html.Div(
 
     ]
 )
+
+### CALLBACKS FOR SCROLLBAR
+
+@app.callback(Output('example-graph', 'figure'), Input('example-graph', 'figure'), Input("pmd_mc_slider", "value"))
+def update_motion_image(curr_fig, value):
+    import time
+    
+    start_time = time.time()
+    # print("THE TYPE OF CURR FIG IS {}".format(type(curr_fig)))
+    # print(list(curr_fig.keys()))
+    # print(list(curr_fig['data'][0].keys()))
+    min_val, max_val = (0, random_data_temp.shape[3]-1)
+    value = max(min_val, value)
+    value = min(max_val, value)
+    # imgs = random_data_temp[:, :, :, value]
+    
+    
+    num_imgs = 3 ##HARDCODED FOR NOW, CHANGE IF NEEDED
+    for i in range(3):
+        curr_fig['data'][i]['z'] = random_data_temp[i, :, :, value]
+        # curr_fig.data[i].update(z=random_data_temp[i, :, :, value])
+    
+    # fig_mc_pmd_plots = px.imshow(imgs, facet_col=0)
+    # fig_mc_pmd_plots.update(layout_coloraxis_showscale=False)
+
+    print(list(curr_fig['layout']))
+    
+    print( curr_fig['layout']['annotations'])
+    print("ANNOTATIONS")
+    img_name_list = ["Motion Corrected Frame {}".format(value+1), "PMD Denoised Frame {}".format(value+1), "PMD Noise Variance Image Frame {}".format(value+1)]
+    for i, name in enumerate(img_name_list):
+        # curr_fig.layout.annotations[i]['text'] = name
+        # print(curr_fig['data'][i]['name'])
+        # print("THAT WAS NAME")
+        # print(list(curr_fig.keys()))
+        curr_fig['layout']['annotations'][i]['text'] = img_name_list[i]
+      
+    print("that took {}".format(time.time() - start_time))
+    return curr_fig
+
+    
+    
+
+
 
 ### CALLBACKS FOR FILE INPUT
 
