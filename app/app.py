@@ -14,6 +14,9 @@ import datetime
 from dash import DiskcacheManager, CeleryManager, Input, Output, html
 import shutil
 import numpy as np
+import json 
+
+import tifffile
 
 ### PRODUCTION VS NON PRODUCTION WORKER MANAGEMENT 
 # if 'REDIS_URL' in os.environ:
@@ -46,6 +49,10 @@ as global variables, which can be modified by the callback functions
 cache['no_file_flag'] = ""
 cache['navigated_folder'] = os.getcwd()
 cache['navigated_file'] = cache['no_file_flag']
+
+cache['PMD_flag'] = False #Indicates whether PMD has been run or not
+cache['demix_flag'] = False #Indicates whether demixing has been run or not 
+
 # present_dir = [os.getcwd(), no_file_flag] #Global variable which will be modified during file selection
 # results_output_folder = [""]
 # cache['results_output_folder'] = ""
@@ -95,16 +102,32 @@ cache['mc_params'] = mc_params
 cache['pmd_params'] = pmd_params
 cache['localnmf_params'] = localnmf_params
 
-random_data_temp = np.random.rand(3,50,50,100)
-
-img = np.random.rand(3,50,50)
+img = np.random.rand(3,50,50)*0
+mc_pmd_vis_frames = [i for i in range(100)]
 fig_mc_pmd_plots = px.imshow(img, facet_col=0)
-fig_mc_pmd_plots.update(layout_coloraxis_showscale=False)
+fig_mc_pmd_plots.update(layout_coloraxis_showscale=True)
 
-# img_name_list = ["Motion Corrected", "PMD Denoised", "PMD Noise Variance Image"]
 img_name_list = ["No Results Yet", "No Results Yet", "No Results Yet"]
 for i, name in enumerate(img_name_list):
     fig_mc_pmd_plots.layout.annotations[i]['text'] = name
+    
+    
+    
+
+#######
+##This is for the pixel display
+#######
+trace = np.zeros((200))
+indices = [i for i in range(1, trace.shape[0]+1)]
+trace = pd.DataFrame(trace, columns = ['X'], index = indices)
+fig_trace_vis = px.line(trace, y="X", 
+                       labels={
+                     "index": "Frame Number",
+                     "X": "A.U.",
+                 },)
+fig_trace_vis.update_layout(title_text="After running registration + PMD, click pixels in above images to see PMD traces here", title_x=0.5)
+
+
 
 ### End of globally used data structures
 
@@ -125,18 +148,23 @@ app.layout = html.Div(
      html.Div(controls), \
     ### Motion Correction Layout## 
      html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify parameters and hit SUBMIT to run"),\
-     dcc.Graph(
-        id='example-graph',
-        figure=fig_mc_pmd_plots
-     ),\
-     dash.dcc.Slider(id='pmd_mc_slider',min=0,max=random_data_temp.shape[3],marks=None,updatemode='drag',step=1,\
-                     value=np.argmin(np.abs(random_data_temp.shape[3]-1))),\
-     html.Button(id="button_id", children="Run Job!"),\
      html.Div(
             [
                 html.Div(id='placeholder', children=""),
             ]
         ),\
+     html.Button(id="button_id", children="Run Job!"),\
+     dcc.Graph(
+        id='example-graph',
+        figure=fig_mc_pmd_plots
+     ),\
+     dcc.Graph(
+        id='trace_vis',
+        figure=fig_trace_vis
+    ),\
+     dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='drag',step=1,\
+                     value=np.argmin(np.abs(100-1))),\
+     
      ### Demixing ### 
      html.H1("Step 2: Demixing. Specify paramters and hit SUBMIT to run"),\
      html.Div(
@@ -150,44 +178,106 @@ app.layout = html.Div(
     ]
 )
 
+
+### CALLBACKS for point-based clicking
+
+def get_points(clickData):
+    if not clickData:
+        raise dash.exceptions.PreventUpdate
+    outputs = {k: clickData["points"][0][k] for k in ["x", "y"]}
+    return outputs["x"], outputs["y"]
+
+@app.callback(
+    Output("trace_vis", "figure"),
+    Input("example-graph", "clickData"),
+)
+def click(clickData):
+    x, y = get_points(clickData)
+    print("the points obtained are {}".format((x,y)))
+    if cache['PMD_flag']:
+        temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
+        temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+        desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+        
+        desired_row = (cache['U'].getrow(desired_index).dot(cache['R'])).dot(cache['V']).flatten()
+        
+        trace = desired_row.flatten()
+        trace = pd.DataFrame(trace, columns = ['X'])
+        fig_trace_vis = px.line(trace, y="X", 
+                       labels={
+                     "index": "Frame Number",
+                     "X": "A.U.",
+                 },)
+        fig_trace_vis.update_layout(title_text="Trace of pixel height = {} width = {}".format(y, x), title_x=0.5)
+        
+        return fig_trace_vis
+
+    else:
+        pass
+
+    
+# @app.callback(
+#     Output("where", "children"),
+#     Input("PMD_Summary_IMG", "clickData"),
+# )
+# def click(clickData):
+#     if not clickData:
+#         raise dash.exceptions.PreventUpdate
+#     return json.dumps({k: clickData["points"][0][k] for k in ["x", "y"]})
+
+
 ### CALLBACKS FOR SCROLLBAR
+def load_mc_frame(index):
+    
+    data = np.array(tifffile.imread(cache['navigated_file'], key=index))
+    print("loaded mc frame data shape is {}".format(data.shape))
+    return data
+
+def get_PMD_frame(index):
+    RV = cache['R'].dot(cache['V'][:, [index]])
+    URV = cache['U'].dot(RV)
+    
+
+    URV = URV.reshape(cache['shape'][:2], order=cache['order'])
+    URV *= cache['noise_var_img']
+    URV += cache['mean_img']
+    URV -= np.amin(URV)
+    return URV
+    
 
 @app.callback(Output('example-graph', 'figure'), Input('example-graph', 'figure'), Input("pmd_mc_slider", "value"))
 def update_motion_image(curr_fig, value):
-    import time
-    
-    start_time = time.time()
-    # print("THE TYPE OF CURR FIG IS {}".format(type(curr_fig)))
-    # print(list(curr_fig.keys()))
-    # print(list(curr_fig['data'][0].keys()))
-    min_val, max_val = (0, random_data_temp.shape[3]-1)
-    value = max(min_val, value)
-    value = min(max_val, value)
-    # imgs = random_data_temp[:, :, :, value]
-    
-    
-    num_imgs = 3 ##HARDCODED FOR NOW, CHANGE IF NEEDED
-    for i in range(3):
-        curr_fig['data'][i]['z'] = random_data_temp[i, :, :, value]
-        # curr_fig.data[i].update(z=random_data_temp[i, :, :, value])
-    
-    # fig_mc_pmd_plots = px.imshow(imgs, facet_col=0)
-    # fig_mc_pmd_plots.update(layout_coloraxis_showscale=False)
+        
+    if cache['navigated_file'] == cache['no_file_flag']:
+        return curr_fig
+    else:
+        
+        min_val, max_val = (0, cache['shape'][2]-1)
+        value = max(min_val, value)
+        value = min(max_val, value)
 
-    print(list(curr_fig['layout']))
-    
-    print( curr_fig['layout']['annotations'])
-    print("ANNOTATIONS")
-    img_name_list = ["Motion Corrected Frame {}".format(value+1), "PMD Denoised Frame {}".format(value+1), "PMD Noise Variance Image Frame {}".format(value+1)]
-    for i, name in enumerate(img_name_list):
-        # curr_fig.layout.annotations[i]['text'] = name
-        # print(curr_fig['data'][i]['name'])
-        # print("THAT WAS NAME")
-        # print(list(curr_fig.keys()))
-        curr_fig['layout']['annotations'][i]['text'] = img_name_list[i]
-      
-    print("that took {}".format(time.time() - start_time))
-    return curr_fig
+        print('cache noise variance image max is {}'.format(cache['noise_var_img']))
+        used_data = [load_mc_frame(value), get_PMD_frame(value), cache['noise_var_img']]
+        
+
+
+        num_imgs = 3 ##HARDCODED FOR NOW, CHANGE IF NEEDED
+        for i in range(3):
+            curr_fig['data'][i]['z'] = used_data[i]
+
+        print(list(curr_fig['layout']))
+
+        print( curr_fig['layout']['annotations'])
+        print("ANNOTATIONS")
+        img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-denoised Frame {}".format(value+1), "PMD Noise Variance Image Frame {}".format(value+1)]
+        for i, name in enumerate(img_name_list):
+            # curr_fig.layout.annotations[i]['text'] = name
+            # print(curr_fig['data'][i]['name'])
+            # print("THAT WAS NAME")
+            # print(list(curr_fig.keys()))
+            curr_fig['layout']['annotations'][i]['text'] = img_name_list[i]
+
+        return curr_fig
 
     
     
@@ -230,7 +320,7 @@ def list_all_files(folder_name):
 
 
 @dash.callback(
-    output=Output("placeholder", "children"),
+    Output("placeholder", "children"), Output("pmd_mc_slider", "value"),
     inputs=Input("button_id", "n_clicks"),
     background=True,
     running=[
@@ -946,12 +1036,26 @@ def register_and_compress_data(n_clicks):
         else:
             display("WARNING: YOU ARE NOT USING THE DECONVOLUTION STEP, MASKNMF WILL NOT PERFORM AS WELL.")
             deconv_components = s[:, None] * V[:, :limit]
-
-
+            
+        
         def save_decomposition(U, R, s, V, deconvolved_temporal, load_obj, folder, order="F"):
+            '''
+            Write results to temporary location 
+            
+            '''
             file_name = "decomposition.npz"
             final_path = os.path.join(folder, file_name)
 
+            #Write to cache for quick access
+            cache['U'] = U
+            cache['order'] = order
+            cache['R'] = R
+            cache['V'] = s[:, None]*V[:, :limit]
+            cache['shape'] = load_obj.shape
+            cache['mean_img'] = tiff_loader_obj.mean_img
+            cache['noise_var_img'] = tiff_loader_obj.std_img
+            cache['PMD_flag'] = True
+            
             np.savez(final_path, fov_shape = load_obj.shape[:2], \
                 fov_order=order, U_data = U.data, \
                 U_indices = U.indices,\
@@ -995,6 +1099,8 @@ def register_and_compress_data(n_clicks):
                               batching=5, dtype="float32",  order="F", corrector = corrector)
         torch.cuda.empty_cache()
         jax.clear_backends() 
+    
+        return None, 0
     except FileNotFoundError:
         print("\n \n \n")
         display("--------ERROR GENERATED, DETAILS BELOW-----")
