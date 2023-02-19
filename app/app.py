@@ -15,6 +15,25 @@ from dash import DiskcacheManager, CeleryManager, Input, Output, html
 import shutil
 import numpy as np
 import json 
+import sys
+
+import localnmf
+from localnmf.superpixel_analysis_ring import superpixel_init
+from localnmf.superpixel_analysis_ring import local_correlation_mat
+import scipy
+import scipy.sparse
+import torch_sparse
+import localnmf 
+from localnmf import superpixel_analysis_ring
+import os
+import numpy as np
+import scipy
+import scipy.sparse
+import torch_sparse
+import torch
+
+import jax
+
 
 import tifffile
 
@@ -53,9 +72,6 @@ cache['navigated_file'] = cache['no_file_flag']
 cache['PMD_flag'] = False #Indicates whether PMD has been run or not
 cache['demix_flag'] = False #Indicates whether demixing has been run or not 
 
-# present_dir = [os.getcwd(), no_file_flag] #Global variable which will be modified during file selection
-# results_output_folder = [""]
-# cache['results_output_folder'] = ""
 
 mc_params = {
     'register':True,
@@ -88,6 +104,7 @@ localnmf_params = {
         'superpixels_corr_thr':[0.9, 0.75, 0.9, 0.86],
         'length_cut':[3,5,2,2],
         'th':[2,2,2,2],
+        'pseudo_2':[0.1, 0.1, 0.1, 0.1],
         'corr_th_fix':0.55,
         'switch_point':5,
         'corr_th_fix_sec':0.7,
@@ -127,6 +144,19 @@ fig_trace_vis = px.line(trace, y="X",
                  },)
 fig_trace_vis.update_layout(title_text="After running registration + PMD, click pixels in above images to see PMD traces here", title_x=0.5)
 
+
+#####
+## This is for the superpixel display
+#####
+
+pixel_plot = np.zeros((40,40))
+fig_superpixel = px.imshow(pixel_plot)
+fig_superpixel.update_layout(title_text="After running registration + PMD, adjust the correlation threshold until neurons have been identified", title_x=0.5)
+
+
+pixel_plot = np.zeros((40,40))
+fig_local_corr = px.imshow(pixel_plot)
+fig_local_corr.update_layout(title_text="After running registration + PMD, adjust the robust correlation thresholds until neurons are cleanly visible", title_x=0.5)
 
 
 ### End of globally used data structures
@@ -170,13 +200,177 @@ app.layout = html.Div(
      html.Div(
             [
                 html.Div(id='placeholder_demix', children=""),
-                # html.Progress(id="progress_bar", value="0"),
             ]
         ),\
-     html.Button(id="button_id_demix", children="Run Job!"),\
-
+     dcc.Graph(
+        id='local_correlation_plot',
+        figure=fig_local_corr
+    ),\
+     dash.dcc.Slider(id='local_correlation_slider',min=0.00,max=1,marks=None,updatemode='drag',step=0.05,\
+                     value=0.1),\
+     
+     dcc.Graph(
+        id='superpixel_plot',
+        figure=fig_superpixel
+    ),\
+    dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
+                     value=0.0),\
+    html.Button(id="button_id_demix", children="Run Job!"),\
     ]
 )
+
+
+### CALLBACKS for CORR img clicking ###
+@app.callback(
+    Output("local_correlation_plot", "figure"),
+    Input("local_correlation_plot", "figure"), 
+    Input("local_correlation_slider", "value")
+)
+def compute_local_corr_values(curr_fig, value):
+    if cache['PMD_flag']:
+
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+
+        U_sparse = scipy.sparse.csr_matrix(cache['U'])
+        R = cache['R']
+        V = cache['V']
+        data_shape = cache['shape']
+        (d1,d2,T) = data_shape
+        data_order = cache['order']
+
+        U_sparse =  torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
+        V = torch.Tensor(V).to(device)
+        R = torch.Tensor(R).to(device)
+        
+        local_corr_image = local_correlation_mat(U_sparse, R, V, (d1,d2,T), value, a=None, c=None, order=data_order)
+        curr_fig = px.imshow(local_corr_image.squeeze(), zmin=0, zmax=1)
+        curr_fig.update_layout(title_text = "Local Correlation Image, robustness level = {}".format(value),title_x=0.5)
+        
+        lnmf_params = cache['localnmf_params']
+        lnmf_params['pseudo_2'][0] = value
+        cache['localnmf_params'] = lnmf_params
+        return curr_fig
+    
+    else:
+        return dash.no_update
+    
+
+
+
+### CALLBACKS for superpixel clicking ###
+@app.callback(
+    Output("superpixel_plot", "figure"),
+    Input("superpixel_plot", "figure"), 
+    Input("superpixel_slider", "value")
+)
+def compute_superpixel_values(curr_fig, value):
+    '''
+    TODO: 
+    Read parameters in a more principled way -- this boilerplate code is extremely hard to maintain
+    '''
+    print("ENTERED COMPUTE SUPERPIXEL_VALUES")
+    if cache['PMD_flag']:
+
+        print("in compute superpixel bit" )
+        num_passes = 2
+        init=['lnmf' for i in range(num_passes)]
+
+        #This is the data structure we use to pass the data into the dictionary
+        custom_init = None
+
+        ##TODO: Only bring in the relevant parameters here, and read them in using cache!!!
+        ii = 0
+        pass_1_superpixels_corr_threshold = 0.9 
+        pass_2_superpixels_corr_threshold = 0.8 
+        pass_3_superpixels_corr_threshold = 0.9 
+        pass_4_superpixels_corr_threshold  = 0.9 
+        cut_off_point=[pass_1_superpixels_corr_threshold, pass_2_superpixels_corr_threshold,pass_3_superpixels_corr_threshold, pass_4_superpixels_corr_threshold]
+        length_cut=[3, 15, 2, 2]
+        th=[2, 2, 2, 2]
+        pass_num = num_passes
+
+        corr_th_fix=0.8 
+        switch_point = 5 
+        corr_th_fix_sec = 0.8 
+        corr_th_del = 0.2 
+
+        max_allow_neuron_size=0.15
+        merge_corr_thr=0.7 
+        merge_overlap_thr=0.7 
+        r = 20 
+
+
+
+
+        ##Do not need to modify
+        residual_cut = [0.5, 0.6, 0.6, 0.6]
+        num_plane=1
+        patch_size=[100,100]
+        plot_en = True
+        text=True
+        maxiter=10
+        init=init #lnmf specifies superpixel init
+        update_after= 4
+        pseudo_1 = [0, 0, 0, 0]
+        # pseudo_2 = [1/20, 1/20,1/15, 0]
+        pseudo_2 = cache['localnmf_params']['pseudo_2']
+        skips=0
+        update_type = "Constant" #Options here are 'Constant' or 'Full'
+        custom_init = custom_init
+        sb = True
+        pseudo_corr = [0, 0, 3/4, 3/4]
+        plot_debug = False
+        denoise = [False for i in range(maxiter)]
+        for k in range(maxiter):
+            if k > 0 and k % 8 == 0:
+                denoise[k] = True
+        batch_size = 100
+        
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+
+
+
+
+
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+
+        U_sparse = scipy.sparse.csr_matrix(cache['U'])
+        R = cache['R']
+        V = cache['V']
+        data_shape = cache['shape']
+        (d1,d2,T) = data_shape
+        data_order = cache['order']
+
+        U_sparse = torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
+        V = torch.Tensor(V).to(device)
+        R = torch.Tensor(R).to(device)
+
+
+        U_sparse, R, V, V_PMD = localnmf.superpixel_analysis_ring.PMD_setup_routine(U_sparse, V, R, device) 
+
+        a, mask_a, c, b, output_dictionary, superpixel_image = superpixel_init(U_sparse,R,V, V_PMD, patch_size, num_plane, data_order, (d1,d2,T), value, residual_cut[ii], length_cut[ii], th[ii], batch_size, pseudo_2[ii], device, text = text, plot_en = plot_en, a = None, c = None)
+
+        curr_fig = px.imshow(superpixel_image)
+        curr_fig.update_layout(title_text = "Correlation Image, epsilon = {}".format(value),title_x=0.5)
+        
+        ##Update the value
+        lnmf_params = cache['localnmf_params']
+        lnmf_params['superpixels_corr_thr'][0] = value
+        cache['localnmf_params'] = lnmf_params
+        return curr_fig
+    
+    else:
+        return dash.no_update
+    
 
 
 ### CALLBACKS for point-based clicking
@@ -215,16 +409,6 @@ def click(clickData):
     else:
         pass
 
-    
-# @app.callback(
-#     Output("where", "children"),
-#     Input("PMD_Summary_IMG", "clickData"),
-# )
-# def click(clickData):
-#     if not clickData:
-#         raise dash.exceptions.PreventUpdate
-#     return json.dumps({k: clickData["points"][0][k] for k in ["x", "y"]})
-
 
 ### CALLBACKS FOR SCROLLBAR
 def load_mc_frame(index):
@@ -248,6 +432,7 @@ def get_PMD_frame(index):
 @app.callback(Output('example-graph', 'figure'), Input('example-graph', 'figure'), Input("pmd_mc_slider", "value"))
 def update_motion_image(curr_fig, value):
         
+    print("ENTERED UPDATE MOTION IMAGE")
     if cache['navigated_file'] == cache['no_file_flag']:
         return curr_fig
     else:
@@ -1049,8 +1234,8 @@ def register_and_compress_data(n_clicks):
             #Write to cache for quick access
             cache['U'] = U
             cache['order'] = order
-            cache['R'] = R
-            cache['V'] = s[:, None]*V[:, :limit]
+            cache['R'] = R * s[None, :]
+            cache['V'] = V
             cache['shape'] = load_obj.shape
             cache['mean_img'] = tiff_loader_obj.mean_img
             cache['noise_var_img'] = tiff_loader_obj.std_img
@@ -1123,30 +1308,152 @@ def register_and_compress_data(n_clicks):
         print(e)
         display("Please re-run the pipeline starting from motion correction.")
 
+        
+def display(msg):
+        """
+        Printing utility that logs time and flushes.
+        """
+        tag = '[' + datetime.datetime.today().strftime('%y-%m-%d %H:%M:%S') + ']: '
+        sys.stdout.write(tag + msg + '\n')
+        sys.stdout.flush()
 
+# @dash.callback(
+#     output=Output("placeholder_demix", "children"),
+#     inputs=Input("button_id_demix", "n_clicks"),
+#     background=True,
+#     running=[
+#         (Output("button_id_demix", "disabled"), True, False),
+#         (
+#             Output("placeholder_demix", "style"),
+#             {"visibility": "hidden"},
+#             {"visibility": "visible"},
+#         ),
+#     ],
+#     prevent_initial_call=True
+# )
 @dash.callback(
     output=Output("placeholder_demix", "children"),
-    inputs=Input("button_id_demix", "n_clicks"),
-    background=True,
-    running=[
-        (Output("button_id_demix", "disabled"), True, False),
-        (
-            Output("placeholder_demix", "style"),
-            {"visibility": "hidden"},
-            {"visibility": "visible"},
-        ),
-    ],
-    prevent_initial_call=True
+    inputs=Input("button_id_demix", "n_clicks")
 )
 def demix_data(n_clicks):
     '''
     Contains algorithm for ROI detection via maskNMF/superpixels + localnmf demixing (or running superpixel + demixing)
     '''
-    import localnmf_functions
-    from localnmf_functions import run_localnmf_demixing
-    print("results output folder before entering demix data is {}".format(cache['save_folder'])) #results_output_folder[0]))
-    run_localnmf_demixing(cache['save_folder'], cache['localnmf_params'])
-    
+    if not cache['PMD_flag']:
+        return ""
+    else:
+        print("results output folder before entering demix data is {}".format(cache['save_folder'])) #results_output_folder[0]))
+        print("TEST")
+        # test_flag = run_localnmf_demixing()
+
+        print("HI")
+        outdir = cache['save_folder']
+        localnmf_params = cache['localnmf_params']
+
+        #This specifies the number of times we run the NMF algorithm on the data. If num_passes = 2 that means we run it once on the PMD data, then subtract the signals and 
+        #re-run on the residual
+        num_passes = localnmf_params['num_passes'] 
+        init=['lnmf' for i in range(num_passes)]
+
+        
+        a = None
+    #This is the data structure we use to pass the data into the dictionary
+        if a is not None:
+            custom_init = dict()
+            custom_init['a'] = a
+            init[0] = 'custom'
+        else:
+            custom_init = None
+
+        cut_off_point=[localnmf_params['superpixels_corr_thr'][i] for i in range(len(localnmf_params['superpixels_corr_thr']))]
+        print(cut_off_point)
+        print("THAT WAS CUT OFF POINT")
+        length_cut=localnmf_params['length_cut']
+        th=localnmf_params['length_cut']
+
+        corr_th_fix=localnmf_params['corr_th_fix'] 
+        switch_point = localnmf_params['switch_point']
+        corr_th_fix_sec = localnmf_params['corr_th_fix_sec']
+        corr_th_del = localnmf_params['corr_th_del']
+
+        max_allow_neuron_size= localnmf_params['max_allow_neuron_size'] #0.15
+        merge_corr_thr= localnmf_params['merge_corr_thr']
+        merge_overlap_thr= localnmf_params['merge_overlap_thr']
+        r =  localnmf_params['r']
+        pseudo_2 = localnmf_params['pseudo_2']
+
+
+
+        
+        residual_cut = [0.5, 0.6, 0.6, 0.6]
+        num_plane=1
+        patch_size=[100,100]
+        plot_en = True
+        text=True
+        maxiter=10
+        init=init #lnmf specifies superpixel init
+        update_after= 4
+        pseudo_1 = [0, 0, 0, 0]
+        skips=0
+        update_type = "Constant" #Options here are 'Constant' or 'Full'
+        custom_init = custom_init
+        sb = True
+        pseudo_corr = [0, 0, 3/4, 3/4]
+        plot_debug = False
+        denoise = [False for i in range(maxiter)]
+        for k in range(maxiter):
+          if k > 0 and k % 8 == 0:
+            denoise[k] = True
+        batch_size = 100
+
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+
+
+
+        U_sparse = scipy.sparse.csr_matrix(cache['U'])
+        R = cache['R']
+        V = cache['V']
+        data_shape = cache['shape']
+        data_order = cache['order']
+
+        U_sparse =  torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
+        V = torch.Tensor(V).to(device)
+        R = torch.Tensor(R).to(device)
+
+        try:
+            torch.cuda.empty_cache()
+            jax.clear_backends()
+            print("RUNNING DEMIXING")
+
+            rlt = superpixel_analysis_ring.demix_whole_data_robust_ring_lowrank(U_sparse,R,\
+                                    V,data_shape, data_order, r, cut_off_point,\
+                                        length_cut, th, num_passes,\
+                                        residual_cut, corr_th_fix,\
+                                          corr_th_fix_sec, corr_th_del, switch_point,\
+                                        max_allow_neuron_size, merge_corr_thr,\
+                                        merge_overlap_thr, num_plane,\
+                                        patch_size, plot_en, text, maxiter,update_after, \
+                                        pseudo_1, pseudo_2, skips, update_type, init=init,\
+                                        custom_init=custom_init,sb=sb, pseudo_corr = pseudo_corr, plot_debug = plot_debug,\
+                                                                        denoise = denoise, device = device, batch_size = batch_size)
+            
+            display("Clearing memory from run")
+            torch.cuda.empty_cache()
+            jax.clear_backends()
+            return dash.no_update
+        except Exception as e:
+            print("\n \n \n")
+            display("--------ERROR GENERATED, DETAILS BELOW-----")
+            print(e)
+
+
+
+        return dash.no_update
+
+
 
 
 
