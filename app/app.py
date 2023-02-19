@@ -113,6 +113,9 @@ localnmf_params = {
         'merge_corr_thr':0.7,
         'merge_overlap_thr':0.7,
         'r':20,
+        'residual_cut':[0.5, 0.6, 0.6, 0.6],
+        'num_plane': 1,
+        'patch_size': [100,100],
 }
 
 cache['mc_params'] = mc_params
@@ -274,70 +277,22 @@ def compute_superpixel_values(curr_fig, value):
     print("ENTERED COMPUTE SUPERPIXEL_VALUES")
     if cache['PMD_flag']:
 
-        print("in compute superpixel bit" )
-        num_passes = 2
-        init=['lnmf' for i in range(num_passes)]
-
-        #This is the data structure we use to pass the data into the dictionary
-        custom_init = None
-
-        ##TODO: Only bring in the relevant parameters here, and read them in using cache!!!
-        ii = 0
-        pass_1_superpixels_corr_threshold = 0.9 
-        pass_2_superpixels_corr_threshold = 0.8 
-        pass_3_superpixels_corr_threshold = 0.9 
-        pass_4_superpixels_corr_threshold  = 0.9 
-        cut_off_point=[pass_1_superpixels_corr_threshold, pass_2_superpixels_corr_threshold,pass_3_superpixels_corr_threshold, pass_4_superpixels_corr_threshold]
-        length_cut=[3, 15, 2, 2]
-        th=[2, 2, 2, 2]
-        pass_num = num_passes
-
-        corr_th_fix=0.8 
-        switch_point = 5 
-        corr_th_fix_sec = 0.8 
-        corr_th_del = 0.2 
-
-        max_allow_neuron_size=0.15
-        merge_corr_thr=0.7 
-        merge_overlap_thr=0.7 
-        r = 20 
-
-
-
+        lnmf_params = cache['localnmf_params']
+        
+        length_cut=lnmf_params['length_cut'][0] 
+        th= lnmf_params['th'][0] 
 
         ##Do not need to modify
-        residual_cut = [0.5, 0.6, 0.6, 0.6]
-        num_plane=1
-        patch_size=[100,100]
+        residual_cut = lnmf_params['residual_cut'][0]
+        num_plane=lnmf_params['num_plane']
+        patch_size= lnmf_params['patch_size']
         plot_en = True
         text=True
-        maxiter=10
-        init=init #lnmf specifies superpixel init
-        update_after= 4
-        pseudo_1 = [0, 0, 0, 0]
-        # pseudo_2 = [1/20, 1/20,1/15, 0]
-        pseudo_2 = cache['localnmf_params']['pseudo_2']
-        skips=0
-        update_type = "Constant" #Options here are 'Constant' or 'Full'
-        custom_init = custom_init
-        sb = True
-        pseudo_corr = [0, 0, 3/4, 3/4]
-        plot_debug = False
-        denoise = [False for i in range(maxiter)]
-        for k in range(maxiter):
-            if k > 0 and k % 8 == 0:
-                denoise[k] = True
+        pseudo_2 = lnmf_params['pseudo_2'][0]
+ 
+        #IS THIS OPTIMAL?? 
         batch_size = 100
         
-        if torch.cuda.is_available():
-            device = 'cuda'
-        else:
-            device = 'cpu'
-
-
-
-
-
         if torch.cuda.is_available():
             device = 'cuda'
         else:
@@ -357,7 +312,7 @@ def compute_superpixel_values(curr_fig, value):
 
         U_sparse, R, V, V_PMD = localnmf.superpixel_analysis_ring.PMD_setup_routine(U_sparse, V, R, device) 
 
-        a, mask_a, c, b, output_dictionary, superpixel_image = superpixel_init(U_sparse,R,V, V_PMD, patch_size, num_plane, data_order, (d1,d2,T), value, residual_cut[ii], length_cut[ii], th[ii], batch_size, pseudo_2[ii], device, text = text, plot_en = plot_en, a = None, c = None)
+        a, mask_a, c, b, output_dictionary, superpixel_image = superpixel_init(U_sparse,R,V, V_PMD, patch_size, num_plane, data_order, (d1,d2,T), value, residual_cut, length_cut, th, batch_size, pseudo_2, device, text = text, plot_en = plot_en, a = None, c = None)
 
         curr_fig = px.imshow(superpixel_image)
         curr_fig.update_layout(title_text = "Correlation Image, epsilon = {}".format(value),title_x=0.5)
