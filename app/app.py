@@ -5,6 +5,7 @@ import os
 import dash
 from dash import Dash, dcc, html
 from dash.dependencies import Input, Output, State
+import dash_bootstrap_components as dbc
 
 import plotly.express as px
 import pandas as pd
@@ -182,51 +183,73 @@ controls = [
 
 app.layout = html.Div(
     # [html.H1("File Selected: None"), html.Div(controls), html.Div(id="folder-files")]
-    [html.H1("Please select a multipage tiff file using the dropdown below", style={'margin-top':'20px'}),\
-     html.H1("File Selected: None",id="folder-files"),\
-     html.H1("Current Folder: {}".format(cache['navigated_folder']), id="curr_folder"),\
-     html.Div(controls), \
-    ### Motion Correction Layout## 
-     html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify parameters and hit SUBMIT to run"),\
-     html.Div(
-            [
-                html.Div(id='placeholder', children=""),
-            ]
-        ),\
-     html.Button(id="button_id", children="Run Job!"),\
-     dcc.Download(id="download_elt"),\
-     dcc.Graph(
-        id='example-graph',
-        figure=fig_mc_pmd_plots
-     ),\
-     dcc.Graph(
-        id='trace_vis',
-        figure=fig_trace_vis
+    [dbc.Row(
+        html.H1("Please select a multipage tiff file using the dropdown below", style={'margin-top':'20px'})
     ),\
-     dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='drag',step=1,\
-                     value=np.argmin(np.abs(100-1))),\
+     dbc.Row(
+        html.H1("File Selected: None",id="folder-files")
+    ),\
+     dbc.Row(
+         html.H1("Current Folder: {}".format(cache['navigated_folder']), id="curr_folder")
+    ),\
+     dbc.Row(
+        html.Div(controls)
+    ), \
+    ### Motion Correction Layout## 
+     dbc.Row(
+    [
+         html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify parameters and hit SUBMIT to run"),\
+         html.Div(
+                [
+                    html.Div(id='placeholder', children=""),
+                ]
+            ),\
+         html.Button(id="button_id", children="Run Job!"),\
+         dcc.Download(id="download_elt")
+    
+    ]
+    ),\
+     
+    dbc.Row(
+     [
+         dcc.Graph(
+                id='example-graph',
+                figure=fig_mc_pmd_plots
+             ),\
+         dcc.Graph(
+            id='trace_vis',
+            figure=fig_trace_vis
+        ),\
+         dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='drag',step=1,\
+                         value=np.argmin(np.abs(100-1)))
+     ]
+    ),\
      
      ### Demixing ### 
-     html.H1("Step 2: Demixing. Specify paramters and hit SUBMIT to run"),\
-     html.Div(
-            [
-                html.Div(id='placeholder_demix', children=""),
-            ]
+     dbc.Row(
+        [
+         html.H1("Step 2: Demixing. Specify paramters and hit SUBMIT to run"),\
+         html.Div(
+                [
+                    html.Div(id='placeholder_demix', children=""),
+                ]
+            ),\
+         dcc.Graph(
+            id='local_correlation_plot',
+            figure=fig_local_corr
         ),\
-     dcc.Graph(
-        id='local_correlation_plot',
-        figure=fig_local_corr
+         dash.dcc.Slider(id='local_correlation_slider',min=0.00,max=1,marks=None,updatemode='drag',step=0.05,\
+                         value=0.1),\
+
+         dcc.Graph(
+            id='superpixel_plot',
+            figure=fig_superpixel
+        ),\
+        dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
+                         value=0.0),\
+        html.Button(id="button_id_demix", children="Run Job!")
+        ]
     ),\
-     dash.dcc.Slider(id='local_correlation_slider',min=0.00,max=1,marks=None,updatemode='drag',step=0.05,\
-                     value=0.1),\
-     
-     dcc.Graph(
-        id='superpixel_plot',
-        figure=fig_superpixel
-    ),\
-    dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
-                     value=0.0),\
-    html.Button(id="button_id_demix", children="Run Job!"),\
     ]
 )
 
