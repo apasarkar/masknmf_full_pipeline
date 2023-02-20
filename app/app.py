@@ -3,7 +3,7 @@
 
 import os
 import dash
-from dash import Dash, dcc, html
+from dash import Dash, dcc, html, ctx
 from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
 
@@ -32,9 +32,10 @@ import scipy
 import scipy.sparse
 import torch_sparse
 import torch
+import localnmf_functions
+from localnmf_functions import get_single_pixel_corr_img
 
 import jax
-
 
 import tifffile
 
@@ -161,13 +162,19 @@ fig_trace_vis.update_layout(title_text="After running registration + PMD, click 
 #####
 
 pixel_plot = np.zeros((40,40))
-fig_superpixel = px.imshow(pixel_plot)
-fig_superpixel.update_layout(title_text="After running registration + PMD, adjust the correlation threshold until neurons have been identified", title_x=0.5)
+fig_local_corr = px.imshow(pixel_plot)
+fig_local_corr.update_layout(title_text="Local Correlation Image: No Results Yet", title_x=0.5)
+
+pixel_plot = np.zeros((40,40))
+fig_pixel_corr = px.imshow(pixel_plot)
+fig_pixel_corr.update_layout(title_text="Pixelwise Correlation Image: No Results Yet", title_x=0.5)
+
 
 
 pixel_plot = np.zeros((40,40))
-fig_local_corr = px.imshow(pixel_plot)
-fig_local_corr.update_layout(title_text="After running registration + PMD, adjust the robust correlation thresholds until neurons are cleanly visible", title_x=0.5)
+fig_superpixel = px.imshow(pixel_plot)
+fig_superpixel.update_layout(title_text="After running registration + PMD, adjust the correlation threshold until neurons have been identified", title_x=0.5)
+
 
 
 ### End of globally used data structures
@@ -245,10 +252,16 @@ app.layout = html.Div(
                         id='local_correlation_plot',
                         figure=fig_local_corr
                     ),\
-                     dash.dcc.Slider(id='local_correlation_slider',min=0.00,max=1,marks=None,updatemode='drag',step=0.05,\
-                                     value=0.1)
+                    html.Div(id='placeholder_local_corr_plot', children=""),\
                 ],\
-                width=6
+                width=4
+            ),\
+            dbc.Col(
+                 dcc.Graph(
+                        id='local_pixel_corr_plot',
+                        figure=fig_pixel_corr
+                    ),\
+                width=4
             ),\
             
             dbc.Col(
@@ -260,7 +273,7 @@ app.layout = html.Div(
                     dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
                                      value=0.0)
                 ],\
-                width=6
+                width=4
             ),\
         ]
     ),\
@@ -271,15 +284,48 @@ app.layout = html.Div(
 )
 
 
+@app.callback(
+    Output("local_pixel_corr_plot", "figure"),
+    Input("local_pixel_corr_plot", "figure"),
+    Input("local_correlation_plot", "clickData")
+)
+def update_single_pixel_corr_plot(curr_fig, clickData):
+    x, y = get_points(clickData)
+    print("the points obtained are {}".format((x,y)))
+    if cache['PMD_flag']:
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+            
+        temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
+        temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+        desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+        U_sparse = torch_sparse.tensor.from_scipy(scipy.sparse.csr_matrix(cache['U'])).to(device)
+        V = torch.Tensor(cache['V']).to(device)
+        R = torch.Tensor(cache['R']).to(device)
+        
+        final_image = get_single_pixel_corr_img(U_sparse, R, V, desired_index).cpu().numpy()
+        final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+        
+        curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
+        curr_fig.update_layout(title_text = "Correlation Image for pixel at y = {} and x = {}".format(y,x),title_x=0.5)
+        return curr_fig
+    else:
+        return dash.no_update
+    
+
 ### CALLBACKS for CORR img clicking ###
 @app.callback(
     Output("local_correlation_plot", "figure"),
     Input("local_correlation_plot", "figure"), 
-    Input("local_correlation_slider", "value")
+    Input("placeholder_local_corr_plot", "children")
 )
 def compute_local_corr_values(curr_fig, value):
     if cache['PMD_flag']:
-
+        trigger_source = ctx.triggered_id
+        print("the compute local corr value trigger source was {}".format(trigger_source))
+        value = cache['localnmf_params']['pseudo_2'][0]
         if torch.cuda.is_available():
             device = 'cuda'
         else:
@@ -298,16 +344,12 @@ def compute_local_corr_values(curr_fig, value):
         
         local_corr_image = local_correlation_mat(U_sparse, R, V, (d1,d2,T), value, a=None, c=None, order=data_order)
         curr_fig = px.imshow(local_corr_image.squeeze(), zmin=0, zmax=1)
-        curr_fig.update_layout(title_text = "Local Correlation Image, robustness level = {}".format(value),title_x=0.5)
-        
-        lnmf_params = cache['localnmf_params']
-        lnmf_params['pseudo_2'][0] = value
-        cache['localnmf_params'] = lnmf_params
+        curr_fig.update_layout(title_text = "Local Robust Correlation Image".format(value),title_x=0.5)
         return curr_fig
     
     else:
-        return dash.no_update
-    
+        return dash.no_update    
+
 
 
 
@@ -324,7 +366,6 @@ def compute_superpixel_values(curr_fig, value):
     '''
     print("ENTERED COMPUTE SUPERPIXEL_VALUES")
     if cache['PMD_flag']:
-
         lnmf_params = cache['localnmf_params']
         
         length_cut=lnmf_params['length_cut'][0] 
@@ -502,7 +543,7 @@ def list_all_files(folder_name):
 
 
 @dash.callback(
-    Output("placeholder", "children"), Output("pmd_mc_slider", "value"), Output("download_elt", "data"),
+    Output("placeholder", "children"), Output("pmd_mc_slider", "value"), Output("download_elt", "data"), Output("placeholder_local_corr_plot", "children"),
     inputs=Input("button_id", "n_clicks"),
     background=True,
     manager=background_callback_manager,
@@ -1264,7 +1305,7 @@ def register_and_compress_data(n_clicks):
         jax.clear_backends() 
     
         downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
-        return None, 0, dcc.send_file(downloaded_data_file)
+        return None, 0, dcc.send_file(downloaded_data_file), " "
     except FileNotFoundError:
         print("\n \n \n")
         display("--------ERROR GENERATED, DETAILS BELOW-----")
