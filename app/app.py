@@ -362,7 +362,7 @@ def click(clickData):
         return fig_trace_vis
 
     else:
-        pass
+        return dash.no_update
 
 
 ### CALLBACKS FOR SCROLLBAR
@@ -411,10 +411,6 @@ def update_motion_image(curr_fig, value):
         print("ANNOTATIONS")
         img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-denoised Frame {}".format(value+1), "PMD Noise Variance Image Frame {}".format(value+1)]
         for i, name in enumerate(img_name_list):
-            # curr_fig.layout.annotations[i]['text'] = name
-            # print(curr_fig['data'][i]['name'])
-            # print("THAT WAS NAME")
-            # print(list(curr_fig.keys()))
             curr_fig['layout']['annotations'][i]['text'] = img_name_list[i]
 
         return curr_fig
@@ -447,10 +443,8 @@ def list_all_files(folder_name):
         final_dir = [{"label": x, "value": x} for x in list_dir(current_folder)]
         return default_value, new_text, folder_response.format(current_folder), final_dir
     elif is_dir:
-        # present_dir[1] = cache['no_file_flag']
         cache['navigated_file'] = cache['no_file_flag']
         cache['navigated_folder'] = decided_path
-        # present_dir[0] = decided_path
         final_dir = [{"label": x, "value": x} for x in list_dir(decided_path)]
         return default_value, "File Selected: None", folder_response.format(cache['navigated_folder']), final_dir
     else:
@@ -471,12 +465,11 @@ def list_all_files(folder_name):
             {"visibility": "visible"},
         ),
     ],
-    # progress=[Output("progress_bar", "value"), Output("progress_bar", "max")],
     prevent_initial_call=True
 )
 def register_and_compress_data(n_clicks):
-    data_folder = cache['navigated_folder'] #present_dir[0]
-    input_file = cache['navigated_file'] #present_dir[1]
+    data_folder = cache['navigated_folder'] 
+    input_file = cache['navigated_file'] 
 
     from datetime import datetime
     import os
@@ -517,35 +510,33 @@ def register_and_compress_data(n_clicks):
     #NOTE: this data folder will also contain the location of the TestData
     data_folder = set_and_create_folder_path(cache['navigated_file'], cache['navigated_folder'])
     cache['save_folder'] = data_folder
-    # results_output_folder[0] = data_folder
     # print("AFTER THE ASSIGNMENT FOR THE OUTPUT FOLDER THE RESULT OF RESULT OUTPUT FOLDER IS {}".format(results_output_folder[0]))
     input_file = cache['navigated_file']#present_dir[1]
 
     mc_params_dict = cache['mc_params']
 
-    register = mc_params_dict['register']#True #@param {type:"boolean"}
-    # devel = True #@param {type:"boolean"}
-    devel = mc_params_dict['devel']#True #never delete uploaded data
+    register = mc_params_dict['register']
+    devel = mc_params_dict['devel']
 
-    dx = mc_params_dict['dx'] #2 #@param {type:"slider", min:0, max:100, step:1}
-    dy = mc_params_dict['dy'] #2 #@param {type:"slider", min:0, max:100, step:1}
+    dx = mc_params_dict['dx'] 
+    dy = mc_params_dict['dy'] 
 
     dxy = (dx, dy)
 
-    max_shift_in_um_xdimension = mc_params_dict['max_shift_in_um'][0]#50 #@param {type:"slider", min:0, max:200, step:1}
-    max_shift_in_um_ydimension = mc_params_dict['max_shift_in_um'][1]#50 #@param {type:"slider", min:0, max:200, step:1}
+    max_shift_in_um_xdimension = mc_params_dict['max_shift_in_um'][0] 
+    max_shift_in_um_ydimension = mc_params_dict['max_shift_in_um'][1] 
 
     max_shift_um = (max_shift_in_um_xdimension, max_shift_in_um_ydimension)
 
-    max_deviation_rigid = mc_params_dict['max_deviation_rigid'] #5 #@param {type:"slider", min:0, max:100, step:1}
+    max_deviation_rigid = mc_params_dict['max_deviation_rigid']
 
-    patch_motion_um_x = mc_params_dict['patch_motion_um'][0] #17 #@param {type:"slider", min:0, max:200, step:1}
-    patch_motion_um_y = mc_params_dict['patch_motion_um'][1] #17 #@param {type:"slider", min:0, max:200, step:1}
+    patch_motion_um_x = mc_params_dict['patch_motion_um'][0] 
+    patch_motion_um_y = mc_params_dict['patch_motion_um'][1] 
 
     patch_motion_um = (patch_motion_um_x, patch_motion_um_y)
 
-    overlaps_x = mc_params_dict['overlaps'][0] #24 #@param {type:"slider", min:0, max:200, step:1}
-    overlaps_y = mc_params_dict['overlaps'][1] #24 #@param {type:"slider", min:0, max:200, step:1}
+    overlaps_x = mc_params_dict['overlaps'][0] 
+    overlaps_y = mc_params_dict['overlaps'][1] 
 
     overlaps = (overlaps_x, overlaps_y)
 
@@ -568,7 +559,6 @@ def register_and_compress_data(n_clicks):
         gSig_filt = None
 
     frames_per_split =  500
-    # frames_per_split = 200
 
     INPUT_PARAMS = {
         # Caiman Internal:
@@ -939,9 +929,6 @@ def register_and_compress_data(n_clicks):
         )
 
 
-        # target = corrector.target_file
-
-
         display("Motion correction completed.")
 
 
@@ -969,8 +956,6 @@ def register_and_compress_data(n_clicks):
                   default=INPUT_PARAMS,
                   **params)
 
-
-    # %load_ext line_profiler
     # Run Single Pass Motion Correction
     try:
         if register:
@@ -998,15 +983,15 @@ def register_and_compress_data(n_clicks):
     ##########
   
     #NOTE: this data folder will also contain the location of the TestData
-    data_folder = cache['save_folder'] #results_output_folder[0]
+    data_folder = cache['save_folder'] 
 
     pmd_params_dict = cache['pmd_params']
-    block_height = pmd_params_dict['block_height'] #32 #@param {type:"slider", min:20, max:100, step:4}
-    block_width = pmd_params_dict['block_width'] #32 #@param {type:"slider", min:20, max:100, step:4}
+    block_height = pmd_params_dict['block_height']
+    block_width = pmd_params_dict['block_width'] 
     block_sizes = [block_height, block_width]
 
-    overlaps_height = pmd_params_dict['overlaps_height'] #10 #@param {type:"slider", min:0, max:100, step:1}
-    overlaps_width = pmd_params_dict['overlaps_width'] #10 #@param {type:"slider", min:0, max:100, step:1}
+    overlaps_height = pmd_params_dict['overlaps_height'] 
+    overlaps_width = pmd_params_dict['overlaps_width'] 
 
     if overlaps_height > block_height: 
         print("Overlaps height was set to be greater than block height, which is not valid")
@@ -1021,30 +1006,23 @@ def register_and_compress_data(n_clicks):
     overlap = [overlaps_height, overlaps_width]
 
 
-    window_length = pmd_params_dict['window_length'] #6000 #@param {type:"integer"}
+    window_length = pmd_params_dict['window_length'] 
     if window_length <= 0:
         print("Window length cannot be negative! Resetting to 6000")
         window_length = 6000
     start = 0
     end = window_length
 
-    # background_rank = 0
-    background_rank = pmd_params_dict['background_rank'] #15 #@param {type:"slider", min:0, max:100, step:1}
-
-    # rank_prune_factor = 0.25 #@param {type:'slider', min:0, max:1, step:0.01}
-
+    background_rank = pmd_params_dict['background_rank'] 
     deconvolve=True
     deconv_batch=1000
-    # deconvolve=True #@param {type:'boolean'}
-    # deconv_batch=1000  #@param {type:'slider', min:1000, max:30000, step:1000}
 
     ###THESE PARAMS ARE NOT MODIFIED
-    # num_sims = 64
     sim_conf = 5
-    max_rank_per_block = 40 #@param {type:"slider", min:5, max:50, step:1}
+    max_rank_per_block = 40 
 
     #@markdown Keep run_deconv true unless you do not want to run maskNMF demixing
-    run_deconv = True #@param {type:'boolean'}
+    run_deconv = True 
     max_components = max_rank_per_block
 
     INPUT_PARAMS = {
@@ -1060,10 +1038,6 @@ def register_and_compress_data(n_clicks):
         }
     }
 
-
-    ## PMD: Run the matrix decomposition pipeline 
-
-    ##TODO: Add apriori SVD option
     block_sizes = block_sizes
     overlap = overlap
 
@@ -1272,20 +1246,7 @@ def display(msg):
         sys.stdout.write(tag + msg + '\n')
         sys.stdout.flush()
 
-# @dash.callback(
-#     output=Output("placeholder_demix", "children"),
-#     inputs=Input("button_id_demix", "n_clicks"),
-#     background=True,
-#     running=[
-#         (Output("button_id_demix", "disabled"), True, False),
-#         (
-#             Output("placeholder_demix", "style"),
-#             {"visibility": "hidden"},
-#             {"visibility": "visible"},
-#         ),
-#     ],
-#     prevent_initial_call=True
-# )
+
 @dash.callback(
     output=Output("placeholder_demix", "children"),
     inputs=Input("button_id_demix", "n_clicks")
