@@ -194,6 +194,7 @@ app.layout = html.Div(
             ]
         ),\
      html.Button(id="button_id", children="Run Job!"),\
+     dcc.Download(id="download_elt"),\
      dcc.Graph(
         id='example-graph',
         figure=fig_mc_pmd_plots
@@ -461,7 +462,7 @@ def list_all_files(folder_name):
 
 
 @dash.callback(
-    Output("placeholder", "children"), Output("pmd_mc_slider", "value"),
+    Output("placeholder", "children"), Output("pmd_mc_slider", "value"), Output("download_elt", "data"),
     inputs=Input("button_id", "n_clicks"),
     background=True,
     manager=background_callback_manager,
@@ -1222,7 +1223,8 @@ def register_and_compress_data(n_clicks):
         torch.cuda.empty_cache()
         jax.clear_backends() 
     
-        return None, 0
+        downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
+        return None, 0, dcc.send_file(downloaded_data_file)
     except FileNotFoundError:
         print("\n \n \n")
         display("--------ERROR GENERATED, DETAILS BELOW-----")
