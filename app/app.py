@@ -287,39 +287,84 @@ app.layout = html.Div(
 @app.callback(
     Output("local_pixel_corr_plot", "figure"),
     Input("local_pixel_corr_plot", "figure"),
-    Input("local_correlation_plot", "clickData")
+    Input("local_correlation_plot", "clickData"),
+    Input("local_correlation_plot", "figure"),
+    prevent_initial_call=True
 )
-def update_single_pixel_corr_plot(curr_fig, clickData):
-    x, y = get_points(clickData)
-    print("the points obtained are {}".format((x,y)))
-    if cache['PMD_flag']:
-        if torch.cuda.is_available():
-            device = 'cuda'
+def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
+    button_clicked = list(ctx.triggered_prop_ids.keys())[0]
+    
+    if button_clicked == "local_correlation_plot.clickData":
+        print("local_correlation_plot.clickData was the source of the callback") 
+        x, y = get_points(clickData)
+        print("the points obtained are {}".format((x,y)))
+        if cache['PMD_flag']:
+            if torch.cuda.is_available():
+                device = 'cuda'
+            else:
+                device = 'cpu'
+
+            temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
+            temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+            desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+            U_sparse = torch_sparse.tensor.from_scipy(scipy.sparse.csr_matrix(cache['U'])).to(device)
+            V = torch.Tensor(cache['V']).to(device)
+            R = torch.Tensor(cache['R']).to(device)
+
+            final_image = get_single_pixel_corr_img(U_sparse, R, V, desired_index).cpu().numpy()
+            final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+
+            curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
+            curr_fig.update_layout(title_text = "Correlation Image for pixel at height = {}, width = {}".format(y,x),title_x=0.5)
+            return curr_fig
         else:
-            device = 'cpu'
+            return dash.no_update
+    
+    elif button_clicked== "local_correlation_plot.figure":
+        print("local_correlation_plot.figure was the source of the callback")
+        
+        if cache['PMD_flag']:
+            if torch.cuda.is_available():
+                device = 'cuda'
+            else:
+                device = 'cpu'
+                
+            #Step 1: Get the local correlation figure
+            my_img = np.array(local_corr_fig['data'][0]['z'])
+
+            #Step 2: Get the indices of the "brightest" value
+            x,y = np.unravel_index(my_img.argmax(), my_img.shape)
+
+            #Step 3: Calculate the single pixel corr of this "brightest" value
+            temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
+            temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+            desired_index = temp_mat[x, y] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+            U_sparse = torch_sparse.tensor.from_scipy(scipy.sparse.csr_matrix(cache['U'])).to(device)
+            V = torch.Tensor(cache['V']).to(device)
+            R = torch.Tensor(cache['R']).to(device)
+
+            final_image = get_single_pixel_corr_img(U_sparse, R, V, desired_index).cpu().numpy()
+            final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+
+            curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
+            curr_fig.update_layout(title_text = "Correlation Image for pixel at height = {}, width = {}".format(y,x),title_x=0.5)
+            return curr_fig
             
-        temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
-        temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
-        desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
-        U_sparse = torch_sparse.tensor.from_scipy(scipy.sparse.csr_matrix(cache['U'])).to(device)
-        V = torch.Tensor(cache['V']).to(device)
-        R = torch.Tensor(cache['R']).to(device)
+        else:
+            return dash.no_update
         
-        final_image = get_single_pixel_corr_img(U_sparse, R, V, desired_index).cpu().numpy()
-        final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+
         
-        curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
-        curr_fig.update_layout(title_text = "Correlation Image for pixel at y = {} and x = {}".format(y,x),title_x=0.5)
-        return curr_fig
-    else:
-        return dash.no_update
+        #Step 4: Once this is working, modularize the code so that both branches (== figure and == clickData) call the same function to calculate the local corr img
+        
     
 
 ### CALLBACKS for CORR img clicking ###
 @app.callback(
     Output("local_correlation_plot", "figure"),
     Input("local_correlation_plot", "figure"), 
-    Input("placeholder_local_corr_plot", "children")
+    Input("placeholder_local_corr_plot", "children"),
+    prevent_initial_call=True
 )
 def compute_local_corr_values(curr_fig, value):
     if cache['PMD_flag']:
@@ -357,7 +402,8 @@ def compute_local_corr_values(curr_fig, value):
 @app.callback(
     Output("superpixel_plot", "figure"),
     Input("superpixel_plot", "figure"), 
-    Input("superpixel_slider", "value")
+    Input("superpixel_slider", "value"),
+    prevent_initial_call=True,
 )
 def compute_superpixel_values(curr_fig, value):
     '''
