@@ -1256,7 +1256,7 @@ def demix_data(n_clicks):
     Contains algorithm for ROI detection via maskNMF/superpixels + localnmf demixing (or running superpixel + demixing)
     '''
     if not cache['PMD_flag']:
-        return ""
+        return dash.no_update
     else:
         print("results output folder before entering demix data is {}".format(cache['save_folder'])) #results_output_folder[0]))
         print("TEST")
