@@ -116,7 +116,14 @@ localnmf_params = {
         'residual_cut':[0.5, 0.6, 0.6, 0.6],
         'num_plane': 1,
         'patch_size': [100,100],
+        'maxiter': 10,
+        'update_after':4, 
+        'plot_en': True,
+        'skips':0,
+        'text': True,
+        'sb': True,
 }
+
 
 cache['mc_params'] = mc_params
 cache['pmd_params'] = pmd_params
@@ -1255,14 +1262,41 @@ def demix_data(n_clicks):
     '''
     Contains algorithm for ROI detection via maskNMF/superpixels + localnmf demixing (or running superpixel + demixing)
     '''
+    
+    
+    '''
+
+    localnmf_params = {
+            'num_passes':1,
+            'superpixels_corr_thr':[0.9, 0.75, 0.9, 0.86],
+            'length_cut':[3,5,2,2],
+            'th':[2,2,2,2],
+            'pseudo_2':[0.1, 0.1, 0.1, 0.1],
+            'corr_th_fix':0.55,
+            'switch_point':5,
+            'corr_th_fix_sec':0.7,
+            'corr_th_del':0.2,
+            'max_allow_neuron_size':0.15,
+            'merge_corr_thr':0.7,
+            'merge_overlap_thr':0.7,
+            'r':20,
+            'residual_cut':[0.5, 0.6, 0.6, 0.6],
+            'num_plane': 1,
+            'patch_size': [100,100],
+            'maxiter': 10,
+            'update_after':4, 
+            'plot_en': True,
+            'text': True,
+            'sb': True,
+    }
+
+    
+    '''
+    
     if not cache['PMD_flag']:
         return dash.no_update
     else:
-        print("results output folder before entering demix data is {}".format(cache['save_folder'])) #results_output_folder[0]))
-        print("TEST")
-        # test_flag = run_localnmf_demixing()
-
-        print("HI")
+        print("results output folder before entering demix data is {}".format(cache['save_folder'])) 
         outdir = cache['save_folder']
         localnmf_params = cache['localnmf_params']
 
@@ -1301,19 +1335,19 @@ def demix_data(n_clicks):
 
 
         
-        residual_cut = [0.5, 0.6, 0.6, 0.6]
-        num_plane=1
-        patch_size=[100,100]
-        plot_en = True
-        text=True
-        maxiter=10
-        init=init #lnmf specifies superpixel init
-        update_after= 4
+        residual_cut = localnmf_params['residual_cut'] #[0.5, 0.6, 0.6, 0.6]
+        num_plane= localnmf_params['num_plane']
+        patch_size= localnmf_params['patch_size'] #[100,100]
+        plot_en = localnmf_params['plot_en'] #True
+        text= localnmf_params['text']
+        maxiter= localnmf_params['maxiter']
+        init=init 
+        update_after = localnmf_params['update_after']
         pseudo_1 = [0, 0, 0, 0]
-        skips=0
+        skips= localnmf_params['skips'] #0
         update_type = "Constant" #Options here are 'Constant' or 'Full'
         custom_init = custom_init
-        sb = True
+        sb = localnmf_params['sb'] #True
         pseudo_corr = [0, 0, 3/4, 3/4]
         plot_debug = False
         denoise = [False for i in range(maxiter)]
