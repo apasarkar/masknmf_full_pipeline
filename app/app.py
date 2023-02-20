@@ -389,7 +389,7 @@ def update_motion_image(curr_fig, value):
         
     print("ENTERED UPDATE MOTION IMAGE")
     if cache['navigated_file'] == cache['no_file_flag']:
-        return curr_fig
+        return dash.no_update
     else:
         
         min_val, max_val = (0, cache['shape'][2]-1)
