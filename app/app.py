@@ -57,8 +57,8 @@ def list_dir(path):
     return os.listdir(path) + [".."]
 
 
-
-app = Dash(__name__, background_callback_manager=background_callback_manager)
+stylesheets = [dbc.themes.BOOTSTRAP]
+app = Dash(__name__, background_callback_manager=background_callback_manager, external_stylesheets=stylesheets)
 
 ##Globally used data structures/info
 '''
@@ -225,30 +225,47 @@ app.layout = html.Div(
      ]
     ),\
      
+     dbc.Row(
+        [
+            html.H1("Step 2: Demixing. Specify paramters and hit SUBMIT to run"),\
+            html.Div(
+                    [
+                        html.Div(id='placeholder_demix', children=""),
+                    ]
+                ),\
+        ]
+    ),\
+     
      ### Demixing ### 
      dbc.Row(
         [
-         html.H1("Step 2: Demixing. Specify paramters and hit SUBMIT to run"),\
-         html.Div(
+            dbc.Col(
                 [
-                    html.Div(id='placeholder_demix', children=""),
-                ]
+                     dcc.Graph(
+                        id='local_correlation_plot',
+                        figure=fig_local_corr
+                    ),\
+                     dash.dcc.Slider(id='local_correlation_slider',min=0.00,max=1,marks=None,updatemode='drag',step=0.05,\
+                                     value=0.1)
+                ],\
+                width=6
             ),\
-         dcc.Graph(
-            id='local_correlation_plot',
-            figure=fig_local_corr
-        ),\
-         dash.dcc.Slider(id='local_correlation_slider',min=0.00,max=1,marks=None,updatemode='drag',step=0.05,\
-                         value=0.1),\
-
-         dcc.Graph(
-            id='superpixel_plot',
-            figure=fig_superpixel
-        ),\
-        dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
-                         value=0.0),\
-        html.Button(id="button_id_demix", children="Run Job!")
+            
+            dbc.Col(
+                [
+                    dcc.Graph(
+                        id='superpixel_plot',
+                        figure=fig_superpixel
+                    ),\
+                    dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
+                                     value=0.0)
+                ],\
+                width=6
+            ),\
         ]
+    ),\
+    dbc.Row(
+        html.Button(id="button_id_demix", children="Run Job!")
     ),\
     ]
 )
