@@ -464,6 +464,7 @@ def list_all_files(folder_name):
     Output("placeholder", "children"), Output("pmd_mc_slider", "value"),
     inputs=Input("button_id", "n_clicks"),
     background=True,
+    manager=background_callback_manager,
     running=[
         (Output("button_id", "disabled"), True, False),
         (
@@ -1261,36 +1262,6 @@ def display(msg):
 def demix_data(n_clicks):
     '''
     Contains algorithm for ROI detection via maskNMF/superpixels + localnmf demixing (or running superpixel + demixing)
-    '''
-    
-    
-    '''
-
-    localnmf_params = {
-            'num_passes':1,
-            'superpixels_corr_thr':[0.9, 0.75, 0.9, 0.86],
-            'length_cut':[3,5,2,2],
-            'th':[2,2,2,2],
-            'pseudo_2':[0.1, 0.1, 0.1, 0.1],
-            'corr_th_fix':0.55,
-            'switch_point':5,
-            'corr_th_fix_sec':0.7,
-            'corr_th_del':0.2,
-            'max_allow_neuron_size':0.15,
-            'merge_corr_thr':0.7,
-            'merge_overlap_thr':0.7,
-            'r':20,
-            'residual_cut':[0.5, 0.6, 0.6, 0.6],
-            'num_plane': 1,
-            'patch_size': [100,100],
-            'maxiter': 10,
-            'update_after':4, 
-            'plot_en': True,
-            'text': True,
-            'sb': True,
-    }
-
-    
     '''
     
     if not cache['PMD_flag']:
