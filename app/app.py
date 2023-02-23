@@ -34,6 +34,7 @@ import torch_sparse
 import torch
 import localnmf_functions
 from localnmf_functions import get_single_pixel_corr_img
+import math
 
 import jax
 
@@ -170,6 +171,12 @@ fig_pixel_corr = px.imshow(pixel_plot)
 fig_pixel_corr.update_layout(title_text="Pixelwise Correlation Image: No Results Yet", title_x=0.5)
 
 
+pixel_hist_values = []
+pixel_hist_columns = ['correlation values']
+fig_pixel_corr_hist = px.histogram(pixel_hist_values, x=pixel_hist_columns)
+fig_pixel_corr_hist.update_layout(title_text="Pixel Correlation Histogram: No Results Yet", title_x=0.5)
+
+
 
 pixel_plot = np.zeros((40,40))
 fig_superpixel = px.imshow(pixel_plot)
@@ -254,14 +261,22 @@ app.layout = html.Div(
                     ),\
                     html.Div(id='placeholder_local_corr_plot', children=""),\
                 ],\
-                width=4
+                width=3
             ),\
             dbc.Col(
                  dcc.Graph(
                         id='local_pixel_corr_plot',
                         figure=fig_pixel_corr
                     ),\
-                width=4
+                width=3
+            ),\
+            
+            dbc.Col(
+                dcc.Graph(
+                    id='local_correlation_histogram',
+                    figure=fig_pixel_corr_hist,
+                ),\
+                width=3
             ),\
             
             dbc.Col(
@@ -273,7 +288,7 @@ app.layout = html.Div(
                     dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
                                      value=0.0)
                 ],\
-                width=4
+                width=3
             ),\
         ]
     ),\
@@ -282,6 +297,49 @@ app.layout = html.Div(
     ),\
     ]
 )
+
+
+@app.callback(
+    Output("local_correlation_histogram", "figure"),
+    Input("local_correlation_histogram", "figure"),
+    Input("local_pixel_corr_plot", "relayoutData"),
+    Input("local_pixel_corr_plot", "figure"),
+    prevent_initial_call=True
+)
+def update_corr_pixel_histogram(curr_fig, relayoutData, pixel_fig):
+    button_clicked = list(ctx.triggered_prop_ids.keys())
+    if "local_pixel_corr_plot.relayoutData" in button_clicked or 'local_pixel_corr_plot.figure' in button_clicked:
+        if cache['PMD_flag']:
+            print("the relayout data is {}".format(relayoutData))
+
+            if 'xaxis.autorange' in relayoutData.keys() or 'autosize' in relayoutData.keys():
+                dim1_start = 0
+                dim1_end = cache['shape'][0]
+
+                dim2_start = 0
+                dim2_end = cache['shape'][1]
+            else:
+                print("entered else statement")
+                dim1_end = math.floor(relayoutData['yaxis.range[0]'])
+                dim1_start = min(cache['shape'][0], math.ceil(relayoutData['yaxis.range[1]'])) ##NOTE order is reversed here because of the way plotly represents the info
+                dim2_start = math.floor(relayoutData['xaxis.range[0]'])
+                dim2_end = min(cache['shape'][1], math.ceil(relayoutData['xaxis.range[1]']))
+                print([dim1_start, dim1_end, dim2_start, dim2_end])
+
+
+            used_array = np.array(pixel_fig['data'][0]['z'])
+            print("the shape of used_array is {}".format(used_array.shape))
+            values = used_array[dim1_start:dim1_end, dim2_start:dim2_end].flatten()
+            columns = ['Pixel-wise corr. histogram']
+            df = pd.DataFrame(values, columns=columns)
+            curr_fig = px.histogram(df, x=columns)
+            return curr_fig
+        else:
+            return dash.no_update
+    else:
+        return dash.no_update
+    
+    
 
 
 @app.callback(
@@ -347,16 +405,12 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
             final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
 
             curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
-            curr_fig.update_layout(title_text = "Correlation Image for pixel at height = {}, width = {}".format(y,x),title_x=0.5)
+            curr_fig.update_layout(title_text = "Pixel Corr. Image at ( {},{} )".format(y,x),title_x=0.5)
             return curr_fig
             
         else:
             return dash.no_update
-        
-
-        
-        #Step 4: Once this is working, modularize the code so that both branches (== figure and == clickData) call the same function to calculate the local corr img
-        
+    
     
 
 ### CALLBACKS for CORR img clicking ###
