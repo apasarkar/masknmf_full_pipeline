@@ -299,8 +299,10 @@ app.layout = html.Div(
 )
 
 
+
 @app.callback(
     Output("local_correlation_histogram", "figure"),
+    Output("superpixel_slider", "value"),
     Input("local_correlation_histogram", "figure"),
     Input("local_pixel_corr_plot", "relayoutData"),
     Input("local_pixel_corr_plot", "figure"),
@@ -333,7 +335,13 @@ def update_corr_pixel_histogram(curr_fig, relayoutData, pixel_fig):
             columns = ['Pixel-wise corr. histogram']
             df = pd.DataFrame(values, columns=columns)
             curr_fig = px.histogram(df, x=columns)
-            return curr_fig
+            
+            if 'local_pixel_corr_plot.figure' in button_clicked:
+                #This means we need to set the superpixel value
+                thres = np.percentile(values, 97) ##TODO: SET THIS MORE INTELLIGENTLY
+                return curr_fig, thres
+            else:
+                return curr_fig, dash.no_update
         else:
             return dash.no_update
     else:
