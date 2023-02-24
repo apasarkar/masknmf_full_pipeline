@@ -38,6 +38,7 @@ import math
 
 import jax
 
+
 import tifffile
 
 ### PRODUCTION VS NON PRODUCTION WORKER MANAGEMENT 
@@ -338,7 +339,7 @@ def update_corr_pixel_histogram(curr_fig, relayoutData, pixel_fig):
             
             if 'local_pixel_corr_plot.figure' in button_clicked:
                 #This means we need to set the superpixel value
-                thres = np.percentile(values, 97) ##TODO: SET THIS MORE INTELLIGENTLY
+                thres = max(0.95, np.percentile(values, 97)) ##TODO: SET THIS MORE INTELLIGENTLY
                 return curr_fig, thres
             else:
                 return curr_fig, dash.no_update
@@ -1080,7 +1081,7 @@ def register_and_compress_data(n_clicks):
         'border_nan': 'copy',               # flag for allowing NaN in the boundaries
         'max_deviation_rigid': 3,           # maximum deviation between rigid and non-rigid
         'max_shifts': (6, 6),               # maximum shifts per dimension (in pixels)
-        'min_mov': None,                    # minimum value of movie
+        'min_mov': -5,                      # minimum value of movie
         'niter_rig': 4,                     # number of iterations rigid motion correction
         'niter_els': 1,                     # number of iterations of piecewise rigid motion correction
         'nonneg_movie': True,               # flag for producing a non-negative movie
@@ -1138,7 +1139,7 @@ def register_and_compress_data(n_clicks):
                  y_shifts_els=corrector.y_shifts_els if pw_rigid else None)
         display('Shifts saved as "shifts.npz".')
 
-
+        corrector_obj.batching=10 ##Long term need to avoid this...
         return corrector_obj, target
 
 
@@ -1166,6 +1167,7 @@ def register_and_compress_data(n_clicks):
             input_file = data_name
             import jax
             jax.clear_backends()
+            torch.cuda.empty_cache()
     except Exception as e:
         print(e)
         display("Program crashed.")
@@ -1220,7 +1222,7 @@ def register_and_compress_data(n_clicks):
     max_rank_per_block = 40 
 
     #@markdown Keep run_deconv true unless you do not want to run maskNMF demixing
-    run_deconv = True 
+    run_deconv = False
     max_components = max_rank_per_block
 
     INPUT_PARAMS = {
@@ -1389,7 +1391,7 @@ def register_and_compress_data(n_clicks):
 
 
 
-    tiff_batch_size = 1000
+    tiff_batch_size = 500
     try:
         import jax
         import torch
