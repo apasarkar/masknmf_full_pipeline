@@ -4,25 +4,23 @@ End to end pipeline for maskNMF, from motion correction to demixing
 # Deployment Methods
 We provide a Dash app for interacting with our calcium and voltage imaging pipelines
 
-## Local Deployment: 
-Use the command
+
+## Local use for end users:
+To launch the app, place your dataset in the folder "datasets" and run:
 
 '''
-INSERT COMMAND TO LAUNCH DOCKERFILE HERE
+make launch dataname=<YOUR_DATASET_NAME>
 '''
 
-This command takes two inputs: (1) The tagged dockerfile to run (here, masknmf_full_pipeline) and (2) The dataset to analyze, which should be located in the "datasets" folder.
+This will launch 
 
-TODO: Eliminate dependency here on "datasets" folder
+## Local use for developers:
+To build a dockerfile, navigate to the top level directory of this repository and run:
+
+'''
+make build
+'''
 
 
-## Server deployment
-
-
-
-## Lightning AI deployment
+## Cloud deployment
 Coming soon
-
-
-## General notes (to formalize soon)
-Make sure pip install dash but also pip install "dash[diskcache]" so that you can run the app. Also pip install dash-extensions and flask-caching (pip install Flask-Caching)
