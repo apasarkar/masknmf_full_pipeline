@@ -38,7 +38,6 @@ import math
 
 import jax
 
-
 import tifffile
 
 ### PRODUCTION VS NON PRODUCTION WORKER MANAGEMENT 
@@ -181,7 +180,7 @@ fig_pixel_corr_hist.update_layout(title_text="Pixel Correlation Histogram: No Re
 
 pixel_plot = np.zeros((40,40))
 fig_superpixel = px.imshow(pixel_plot)
-fig_superpixel.update_layout(title_text="After running registration + PMD, adjust the correlation threshold until neurons have been identified", title_x=0.5)
+fig_superpixel.update_layout(title_text="Superpixelization Image: No Results Yet", title_x=0.5)
 
 
 
@@ -242,7 +241,7 @@ app.layout = html.Div(
      
      dbc.Row(
         [
-            html.H1("Step 2: Demixing. Specify paramters and hit SUBMIT to run"),\
+            html.H1("Step 2: Demixing. Toggle superpixel correlation threshold and hit RUN"),\
             html.Div(
                     [
                         html.Div(id='placeholder_demix', children=""),
@@ -254,6 +253,18 @@ app.layout = html.Div(
      ### Demixing ### 
      dbc.Row(
         [
+            dbc.Col(
+                [
+                    dcc.Graph(
+                        id='superpixel_plot',
+                        figure=fig_superpixel
+                    ),\
+                    dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
+                                     value=0.0)
+                ],\
+                width=3
+            ),\
+            
             dbc.Col(
                 [
                      dcc.Graph(
@@ -279,22 +290,13 @@ app.layout = html.Div(
                 ),\
                 width=3
             ),\
-            
-            dbc.Col(
-                [
-                    dcc.Graph(
-                        id='superpixel_plot',
-                        figure=fig_superpixel
-                    ),\
-                    dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
-                                     value=0.0)
-                ],\
-                width=3
-            ),\
         ]
     ),\
     dbc.Row(
-        html.Button(id="button_id_demix", children="Run Job!")
+        [
+            html.Button(id="button_id_demix", children="Run Job!"),\
+            dcc.Download(id="download_demixing_results")
+        ]
     ),\
     ]
 )
@@ -1449,7 +1451,7 @@ def display(msg):
 
 
 @dash.callback(
-    output=Output("placeholder_demix", "children"),
+    Output("placeholder_demix", "children"), Output("download_demixing_results", "data"),
     inputs=Input("button_id_demix", "n_clicks")
 )
 def demix_data(n_clicks):
@@ -1557,7 +1559,16 @@ def demix_data(n_clicks):
             display("Clearing memory from run")
             torch.cuda.empty_cache()
             jax.clear_backends()
-            return dash.no_update
+            
+            
+            fin_rlt = rlt['fin_rlt']
+            fin_rlt['datashape'] = cache['shape']
+            fin_rlt['data_order'] = cache['order']
+            
+            save_path = os.path.join(cache['save_folder'], "demixingresults.npz")
+            np.savez(save_path, final_results = save_path)
+            
+            return dash.no_update, dcc.send_file(save_path)
         except Exception as e:
             print("\n \n \n")
             display("--------ERROR GENERATED, DETAILS BELOW-----")
@@ -1572,5 +1583,6 @@ def demix_data(n_clicks):
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
-
+    port_number = 8900
+    print("using port {}".format(port_number))
+    app.run_server(host='0.0.0.0', debug=True, port=port_number)

@@ -1,3 +1,3 @@
 #!/bin/bash
 
-sudo docker build --tag masknmf_full_pipeline .
+sudo docker build --tag apasarkar/masknmf_full_pipeline .
