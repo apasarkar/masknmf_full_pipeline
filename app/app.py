@@ -3,8 +3,9 @@
 
 import os
 import dash
-from dash import Dash, dcc, html
+from dash import Dash, dcc, html, ctx
 from dash.dependencies import Input, Output, State
+import dash_bootstrap_components as dbc
 
 import plotly.express as px
 import pandas as pd
@@ -15,6 +16,27 @@ from dash import DiskcacheManager, CeleryManager, Input, Output, html
 import shutil
 import numpy as np
 import json 
+import sys
+
+import localnmf
+from localnmf.superpixel_analysis_ring import superpixel_init
+from localnmf.superpixel_analysis_ring import local_correlation_mat
+import scipy
+import scipy.sparse
+import torch_sparse
+import localnmf 
+from localnmf import superpixel_analysis_ring
+import os
+import numpy as np
+import scipy
+import scipy.sparse
+import torch_sparse
+import torch
+import localnmf_functions
+from localnmf_functions import get_single_pixel_corr_img
+import math
+
+import jax
 
 import tifffile
 
@@ -37,8 +59,8 @@ def list_dir(path):
     return os.listdir(path) + [".."]
 
 
-
-app = Dash(__name__, background_callback_manager=background_callback_manager)
+stylesheets = [dbc.themes.BOOTSTRAP]
+app = Dash(__name__, background_callback_manager=background_callback_manager, external_stylesheets=stylesheets)
 
 ##Globally used data structures/info
 '''
@@ -53,9 +75,6 @@ cache['navigated_file'] = cache['no_file_flag']
 cache['PMD_flag'] = False #Indicates whether PMD has been run or not
 cache['demix_flag'] = False #Indicates whether demixing has been run or not 
 
-# present_dir = [os.getcwd(), no_file_flag] #Global variable which will be modified during file selection
-# results_output_folder = [""]
-# cache['results_output_folder'] = ""
 
 mc_params = {
     'register':True,
@@ -88,6 +107,7 @@ localnmf_params = {
         'superpixels_corr_thr':[0.9, 0.75, 0.9, 0.86],
         'length_cut':[3,5,2,2],
         'th':[2,2,2,2],
+        'pseudo_2':[0.1, 0.1, 0.1, 0.1],
         'corr_th_fix':0.55,
         'switch_point':5,
         'corr_th_fix_sec':0.7,
@@ -96,7 +116,17 @@ localnmf_params = {
         'merge_corr_thr':0.7,
         'merge_overlap_thr':0.7,
         'r':20,
+        'residual_cut':[0.5, 0.6, 0.6, 0.6],
+        'num_plane': 1,
+        'patch_size': [100,100],
+        'maxiter': 10,
+        'update_after':4, 
+        'plot_en': True,
+        'skips':0,
+        'text': True,
+        'sb': True,
 }
+
 
 cache['mc_params'] = mc_params
 cache['pmd_params'] = pmd_params
@@ -128,6 +158,31 @@ fig_trace_vis = px.line(trace, y="X",
 fig_trace_vis.update_layout(title_text="After running registration + PMD, click pixels in above images to see PMD traces here", title_x=0.5)
 
 
+#####
+## This is for the superpixel display
+#####
+
+pixel_plot = np.zeros((40,40))
+fig_local_corr = px.imshow(pixel_plot)
+fig_local_corr.update_layout(title_text="Local Correlation Image: No Results Yet", title_x=0.5)
+
+pixel_plot = np.zeros((40,40))
+fig_pixel_corr = px.imshow(pixel_plot)
+fig_pixel_corr.update_layout(title_text="Pixelwise Correlation Image: No Results Yet", title_x=0.5)
+
+
+pixel_hist_values = []
+pixel_hist_columns = ['correlation values']
+fig_pixel_corr_hist = px.histogram(pixel_hist_values, x=pixel_hist_columns)
+fig_pixel_corr_hist.update_layout(title_text="Pixel Correlation Histogram: No Results Yet", title_x=0.5)
+
+
+
+pixel_plot = np.zeros((40,40))
+fig_superpixel = px.imshow(pixel_plot)
+fig_superpixel.update_layout(title_text="Superpixelization Image: No Results Yet", title_x=0.5)
+
+
 
 ### End of globally used data structures
 
@@ -142,41 +197,335 @@ controls = [
 
 app.layout = html.Div(
     # [html.H1("File Selected: None"), html.Div(controls), html.Div(id="folder-files")]
-    [html.H1("Please select a multipage tiff file using the dropdown below", style={'margin-top':'20px'}),\
-     html.H1("File Selected: None",id="folder-files"),\
-     html.H1("Current Folder: {}".format(cache['navigated_folder']), id="curr_folder"),\
-     html.Div(controls), \
-    ### Motion Correction Layout## 
-     html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify parameters and hit SUBMIT to run"),\
-     html.Div(
-            [
-                html.Div(id='placeholder', children=""),
-            ]
-        ),\
-     html.Button(id="button_id", children="Run Job!"),\
-     dcc.Graph(
-        id='example-graph',
-        figure=fig_mc_pmd_plots
-     ),\
-     dcc.Graph(
-        id='trace_vis',
-        figure=fig_trace_vis
+    [dbc.Row(
+        html.H1("Please select a multipage tiff file using the dropdown below", style={'margin-top':'20px'})
     ),\
-     dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='drag',step=1,\
-                     value=np.argmin(np.abs(100-1))),\
+     dbc.Row(
+        html.H1("File Selected: None",id="folder-files")
+    ),\
+     dbc.Row(
+         html.H1("Current Folder: {}".format(cache['navigated_folder']), id="curr_folder")
+    ),\
+     dbc.Row(
+        html.Div(controls)
+    ), \
+    ### Motion Correction Layout## 
+     dbc.Row(
+    [
+         html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify parameters and hit SUBMIT to run"),\
+         html.Div(
+                [
+                    html.Div(id='placeholder', children=""),
+                ]
+            ),\
+         html.Button(id="button_id", children="Run Job!"),\
+         dcc.Download(id="download_elt")
+    
+    ]
+    ),\
+     
+    dbc.Row(
+     [
+         dcc.Graph(
+                id='example-graph',
+                figure=fig_mc_pmd_plots
+             ),\
+         dcc.Graph(
+            id='trace_vis',
+            figure=fig_trace_vis
+        ),\
+         dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='drag',step=1,\
+                         value=np.argmin(np.abs(100-1)))
+     ]
+    ),\
+     
+     dbc.Row(
+        [
+            html.H1("Step 2: Demixing. Toggle superpixel correlation threshold and hit RUN"),\
+            html.Div(
+                    [
+                        html.Div(id='placeholder_demix', children=""),
+                    ]
+                ),\
+        ]
+    ),\
      
      ### Demixing ### 
-     html.H1("Step 2: Demixing. Specify paramters and hit SUBMIT to run"),\
-     html.Div(
-            [
-                html.Div(id='placeholder_demix', children=""),
-                # html.Progress(id="progress_bar", value="0"),
-            ]
-        ),\
-     html.Button(id="button_id_demix", children="Run Job!"),\
-
+     dbc.Row(
+        [
+            dbc.Col(
+                [
+                    dcc.Graph(
+                        id='superpixel_plot',
+                        figure=fig_superpixel
+                    ),\
+                    dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
+                                     value=0.0)
+                ],\
+                width=3
+            ),\
+            
+            dbc.Col(
+                [
+                     dcc.Graph(
+                        id='local_correlation_plot',
+                        figure=fig_local_corr
+                    ),\
+                    html.Div(id='placeholder_local_corr_plot', children=""),\
+                ],\
+                width=3
+            ),\
+            dbc.Col(
+                 dcc.Graph(
+                        id='local_pixel_corr_plot',
+                        figure=fig_pixel_corr
+                    ),\
+                width=3
+            ),\
+            
+            dbc.Col(
+                dcc.Graph(
+                    id='local_correlation_histogram',
+                    figure=fig_pixel_corr_hist,
+                ),\
+                width=3
+            ),\
+        ]
+    ),\
+    dbc.Row(
+        [
+            html.Button(id="button_id_demix", children="Run Job!"),\
+            dcc.Download(id="download_demixing_results")
+        ]
+    ),\
     ]
 )
+
+
+
+@app.callback(
+    Output("local_correlation_histogram", "figure"),
+    Output("superpixel_slider", "value"),
+    Input("local_correlation_histogram", "figure"),
+    Input("local_pixel_corr_plot", "relayoutData"),
+    Input("local_pixel_corr_plot", "figure"),
+    prevent_initial_call=True
+)
+def update_corr_pixel_histogram(curr_fig, relayoutData, pixel_fig):
+    button_clicked = list(ctx.triggered_prop_ids.keys())
+    if "local_pixel_corr_plot.relayoutData" in button_clicked or 'local_pixel_corr_plot.figure' in button_clicked:
+        if cache['PMD_flag']:
+            print("the relayout data is {}".format(relayoutData))
+
+            if 'xaxis.autorange' in relayoutData.keys() or 'autosize' in relayoutData.keys():
+                dim1_start = 0
+                dim1_end = cache['shape'][0]
+
+                dim2_start = 0
+                dim2_end = cache['shape'][1]
+            else:
+                print("entered else statement")
+                dim1_end = math.floor(relayoutData['yaxis.range[0]'])
+                dim1_start = min(cache['shape'][0], math.ceil(relayoutData['yaxis.range[1]'])) ##NOTE order is reversed here because of the way plotly represents the info
+                dim2_start = math.floor(relayoutData['xaxis.range[0]'])
+                dim2_end = min(cache['shape'][1], math.ceil(relayoutData['xaxis.range[1]']))
+                print([dim1_start, dim1_end, dim2_start, dim2_end])
+
+
+            used_array = np.array(pixel_fig['data'][0]['z'])
+            print("the shape of used_array is {}".format(used_array.shape))
+            values = used_array[dim1_start:dim1_end, dim2_start:dim2_end].flatten()
+            columns = ['Pixel-wise corr. histogram']
+            df = pd.DataFrame(values, columns=columns)
+            curr_fig = px.histogram(df, x=columns)
+            
+            if 'local_pixel_corr_plot.figure' in button_clicked:
+                #This means we need to set the superpixel value
+                thres = max(0.95, np.percentile(values, 97)) ##TODO: SET THIS MORE INTELLIGENTLY
+                return curr_fig, thres
+            else:
+                return curr_fig, dash.no_update
+        else:
+            return dash.no_update
+    else:
+        return dash.no_update
+    
+    
+
+
+@app.callback(
+    Output("local_pixel_corr_plot", "figure"),
+    Input("local_pixel_corr_plot", "figure"),
+    Input("local_correlation_plot", "clickData"),
+    Input("local_correlation_plot", "figure"),
+    prevent_initial_call=True
+)
+def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
+    button_clicked = list(ctx.triggered_prop_ids.keys())[0]
+    
+    if button_clicked == "local_correlation_plot.clickData":
+        print("local_correlation_plot.clickData was the source of the callback") 
+        x, y = get_points(clickData)
+        print("the points obtained are {}".format((x,y)))
+        if cache['PMD_flag']:
+            if torch.cuda.is_available():
+                device = 'cuda'
+            else:
+                device = 'cpu'
+
+            temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
+            temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+            desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+            U_sparse = torch_sparse.tensor.from_scipy(scipy.sparse.csr_matrix(cache['U'])).to(device)
+            V = torch.Tensor(cache['V']).to(device)
+            R = torch.Tensor(cache['R']).to(device)
+
+            final_image = get_single_pixel_corr_img(U_sparse, R, V, desired_index).cpu().numpy()
+            final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+
+            curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
+            curr_fig.update_layout(title_text = "Correlation Image for pixel at height = {}, width = {}".format(y,x),title_x=0.5)
+            return curr_fig
+        else:
+            return dash.no_update
+    
+    elif button_clicked== "local_correlation_plot.figure":
+        print("local_correlation_plot.figure was the source of the callback")
+        
+        if cache['PMD_flag']:
+            if torch.cuda.is_available():
+                device = 'cuda'
+            else:
+                device = 'cpu'
+                
+            #Step 1: Get the local correlation figure
+            my_img = np.array(local_corr_fig['data'][0]['z'])
+
+            #Step 2: Get the indices of the "brightest" value
+            x,y = np.unravel_index(my_img.argmax(), my_img.shape)
+
+            #Step 3: Calculate the single pixel corr of this "brightest" value
+            temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
+            temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+            desired_index = temp_mat[x, y] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+            U_sparse = torch_sparse.tensor.from_scipy(scipy.sparse.csr_matrix(cache['U'])).to(device)
+            V = torch.Tensor(cache['V']).to(device)
+            R = torch.Tensor(cache['R']).to(device)
+
+            final_image = get_single_pixel_corr_img(U_sparse, R, V, desired_index).cpu().numpy()
+            final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+
+            curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
+            curr_fig.update_layout(title_text = "Pixel Corr. Image at ( {},{} )".format(y,x),title_x=0.5)
+            return curr_fig
+            
+        else:
+            return dash.no_update
+    
+    
+
+### CALLBACKS for CORR img clicking ###
+@app.callback(
+    Output("local_correlation_plot", "figure"),
+    Input("local_correlation_plot", "figure"), 
+    Input("placeholder_local_corr_plot", "children"),
+    prevent_initial_call=True
+)
+def compute_local_corr_values(curr_fig, value):
+    if cache['PMD_flag']:
+        trigger_source = ctx.triggered_id
+        print("the compute local corr value trigger source was {}".format(trigger_source))
+        value = cache['localnmf_params']['pseudo_2'][0]
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+
+        U_sparse = scipy.sparse.csr_matrix(cache['U'])
+        R = cache['R']
+        V = cache['V']
+        data_shape = cache['shape']
+        (d1,d2,T) = data_shape
+        data_order = cache['order']
+
+        U_sparse =  torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
+        V = torch.Tensor(V).to(device)
+        R = torch.Tensor(R).to(device)
+        
+        local_corr_image = local_correlation_mat(U_sparse, R, V, (d1,d2,T), value, a=None, c=None, order=data_order)
+        curr_fig = px.imshow(local_corr_image.squeeze(), zmin=0, zmax=1)
+        curr_fig.update_layout(title_text = "Local Robust Correlation Image".format(value),title_x=0.5)
+        return curr_fig
+    
+    else:
+        return dash.no_update    
+
+
+
+
+### CALLBACKS for superpixel clicking ###
+@app.callback(
+    Output("superpixel_plot", "figure"),
+    Input("superpixel_plot", "figure"), 
+    Input("superpixel_slider", "value"),
+    prevent_initial_call=True,
+)
+def compute_superpixel_values(curr_fig, value):
+    '''
+    TODO: 
+    Read parameters in a more principled way -- this boilerplate code is extremely hard to maintain
+    '''
+    print("ENTERED COMPUTE SUPERPIXEL_VALUES")
+    if cache['PMD_flag']:
+        lnmf_params = cache['localnmf_params']
+        
+        length_cut=lnmf_params['length_cut'][0] 
+        th= lnmf_params['th'][0] 
+
+        ##Do not need to modify
+        residual_cut = lnmf_params['residual_cut'][0]
+        num_plane=lnmf_params['num_plane']
+        patch_size= lnmf_params['patch_size']
+        plot_en = True
+        text=True
+        pseudo_2 = lnmf_params['pseudo_2'][0]
+ 
+        #IS THIS OPTIMAL?? 
+        batch_size = 100
+        
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+
+        U_sparse = scipy.sparse.csr_matrix(cache['U'])
+        R = cache['R']
+        V = cache['V']
+        data_shape = cache['shape']
+        (d1,d2,T) = data_shape
+        data_order = cache['order']
+
+        U_sparse = torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
+        V = torch.Tensor(V).to(device)
+        R = torch.Tensor(R).to(device)
+
+
+        U_sparse, R, V, V_PMD = localnmf.superpixel_analysis_ring.PMD_setup_routine(U_sparse, V, R, device) 
+
+        a, mask_a, c, b, output_dictionary, superpixel_image = superpixel_init(U_sparse,R,V, V_PMD, patch_size, num_plane, data_order, (d1,d2,T), value, residual_cut, length_cut, th, batch_size, pseudo_2, device, text = text, plot_en = plot_en, a = None, c = None)
+
+        curr_fig = px.imshow(superpixel_image)
+        curr_fig.update_layout(title_text = "Correlation Image, epsilon = {}".format(value),title_x=0.5)
+        
+        ##Update the value
+        lnmf_params = cache['localnmf_params']
+        lnmf_params['superpixels_corr_thr'][0] = value
+        cache['localnmf_params'] = lnmf_params
+        return curr_fig
+    
+    else:
+        return dash.no_update
+    
 
 
 ### CALLBACKS for point-based clicking
@@ -213,17 +562,7 @@ def click(clickData):
         return fig_trace_vis
 
     else:
-        pass
-
-    
-# @app.callback(
-#     Output("where", "children"),
-#     Input("PMD_Summary_IMG", "clickData"),
-# )
-# def click(clickData):
-#     if not clickData:
-#         raise dash.exceptions.PreventUpdate
-#     return json.dumps({k: clickData["points"][0][k] for k in ["x", "y"]})
+        return dash.no_update
 
 
 ### CALLBACKS FOR SCROLLBAR
@@ -248,8 +587,9 @@ def get_PMD_frame(index):
 @app.callback(Output('example-graph', 'figure'), Input('example-graph', 'figure'), Input("pmd_mc_slider", "value"))
 def update_motion_image(curr_fig, value):
         
+    print("ENTERED UPDATE MOTION IMAGE")
     if cache['navigated_file'] == cache['no_file_flag']:
-        return curr_fig
+        return dash.no_update
     else:
         
         min_val, max_val = (0, cache['shape'][2]-1)
@@ -271,10 +611,6 @@ def update_motion_image(curr_fig, value):
         print("ANNOTATIONS")
         img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-denoised Frame {}".format(value+1), "PMD Noise Variance Image Frame {}".format(value+1)]
         for i, name in enumerate(img_name_list):
-            # curr_fig.layout.annotations[i]['text'] = name
-            # print(curr_fig['data'][i]['name'])
-            # print("THAT WAS NAME")
-            # print(list(curr_fig.keys()))
             curr_fig['layout']['annotations'][i]['text'] = img_name_list[i]
 
         return curr_fig
@@ -307,10 +643,8 @@ def list_all_files(folder_name):
         final_dir = [{"label": x, "value": x} for x in list_dir(current_folder)]
         return default_value, new_text, folder_response.format(current_folder), final_dir
     elif is_dir:
-        # present_dir[1] = cache['no_file_flag']
         cache['navigated_file'] = cache['no_file_flag']
         cache['navigated_folder'] = decided_path
-        # present_dir[0] = decided_path
         final_dir = [{"label": x, "value": x} for x in list_dir(decided_path)]
         return default_value, "File Selected: None", folder_response.format(cache['navigated_folder']), final_dir
     else:
@@ -320,9 +654,10 @@ def list_all_files(folder_name):
 
 
 @dash.callback(
-    Output("placeholder", "children"), Output("pmd_mc_slider", "value"),
+    Output("placeholder", "children"), Output("pmd_mc_slider", "value"), Output("download_elt", "data"), Output("placeholder_local_corr_plot", "children"),
     inputs=Input("button_id", "n_clicks"),
     background=True,
+    manager=background_callback_manager,
     running=[
         (Output("button_id", "disabled"), True, False),
         (
@@ -331,12 +666,11 @@ def list_all_files(folder_name):
             {"visibility": "visible"},
         ),
     ],
-    # progress=[Output("progress_bar", "value"), Output("progress_bar", "max")],
     prevent_initial_call=True
 )
 def register_and_compress_data(n_clicks):
-    data_folder = cache['navigated_folder'] #present_dir[0]
-    input_file = cache['navigated_file'] #present_dir[1]
+    data_folder = cache['navigated_folder'] 
+    input_file = cache['navigated_file'] 
 
     from datetime import datetime
     import os
@@ -377,35 +711,33 @@ def register_and_compress_data(n_clicks):
     #NOTE: this data folder will also contain the location of the TestData
     data_folder = set_and_create_folder_path(cache['navigated_file'], cache['navigated_folder'])
     cache['save_folder'] = data_folder
-    # results_output_folder[0] = data_folder
     # print("AFTER THE ASSIGNMENT FOR THE OUTPUT FOLDER THE RESULT OF RESULT OUTPUT FOLDER IS {}".format(results_output_folder[0]))
     input_file = cache['navigated_file']#present_dir[1]
 
     mc_params_dict = cache['mc_params']
 
-    register = mc_params_dict['register']#True #@param {type:"boolean"}
-    # devel = True #@param {type:"boolean"}
-    devel = mc_params_dict['devel']#True #never delete uploaded data
+    register = mc_params_dict['register']
+    devel = mc_params_dict['devel']
 
-    dx = mc_params_dict['dx'] #2 #@param {type:"slider", min:0, max:100, step:1}
-    dy = mc_params_dict['dy'] #2 #@param {type:"slider", min:0, max:100, step:1}
+    dx = mc_params_dict['dx'] 
+    dy = mc_params_dict['dy'] 
 
     dxy = (dx, dy)
 
-    max_shift_in_um_xdimension = mc_params_dict['max_shift_in_um'][0]#50 #@param {type:"slider", min:0, max:200, step:1}
-    max_shift_in_um_ydimension = mc_params_dict['max_shift_in_um'][1]#50 #@param {type:"slider", min:0, max:200, step:1}
+    max_shift_in_um_xdimension = mc_params_dict['max_shift_in_um'][0] 
+    max_shift_in_um_ydimension = mc_params_dict['max_shift_in_um'][1] 
 
     max_shift_um = (max_shift_in_um_xdimension, max_shift_in_um_ydimension)
 
-    max_deviation_rigid = mc_params_dict['max_deviation_rigid'] #5 #@param {type:"slider", min:0, max:100, step:1}
+    max_deviation_rigid = mc_params_dict['max_deviation_rigid']
 
-    patch_motion_um_x = mc_params_dict['patch_motion_um'][0] #17 #@param {type:"slider", min:0, max:200, step:1}
-    patch_motion_um_y = mc_params_dict['patch_motion_um'][1] #17 #@param {type:"slider", min:0, max:200, step:1}
+    patch_motion_um_x = mc_params_dict['patch_motion_um'][0] 
+    patch_motion_um_y = mc_params_dict['patch_motion_um'][1] 
 
     patch_motion_um = (patch_motion_um_x, patch_motion_um_y)
 
-    overlaps_x = mc_params_dict['overlaps'][0] #24 #@param {type:"slider", min:0, max:200, step:1}
-    overlaps_y = mc_params_dict['overlaps'][1] #24 #@param {type:"slider", min:0, max:200, step:1}
+    overlaps_x = mc_params_dict['overlaps'][0] 
+    overlaps_y = mc_params_dict['overlaps'][1] 
 
     overlaps = (overlaps_x, overlaps_y)
 
@@ -428,7 +760,6 @@ def register_and_compress_data(n_clicks):
         gSig_filt = None
 
     frames_per_split =  500
-    # frames_per_split = 200
 
     INPUT_PARAMS = {
         # Caiman Internal:
@@ -752,7 +1083,7 @@ def register_and_compress_data(n_clicks):
         'border_nan': 'copy',               # flag for allowing NaN in the boundaries
         'max_deviation_rigid': 3,           # maximum deviation between rigid and non-rigid
         'max_shifts': (6, 6),               # maximum shifts per dimension (in pixels)
-        'min_mov': None,                    # minimum value of movie
+        'min_mov': -5,                      # minimum value of movie
         'niter_rig': 4,                     # number of iterations rigid motion correction
         'niter_els': 1,                     # number of iterations of piecewise rigid motion correction
         'nonneg_movie': True,               # flag for producing a non-negative movie
@@ -799,9 +1130,6 @@ def register_and_compress_data(n_clicks):
         )
 
 
-        # target = corrector.target_file
-
-
         display("Motion correction completed.")
 
 
@@ -813,7 +1141,7 @@ def register_and_compress_data(n_clicks):
                  y_shifts_els=corrector.y_shifts_els if pw_rigid else None)
         display('Shifts saved as "shifts.npz".')
 
-
+        corrector_obj.batching=10 ##Long term need to avoid this...
         return corrector_obj, target
 
 
@@ -829,8 +1157,6 @@ def register_and_compress_data(n_clicks):
                   default=INPUT_PARAMS,
                   **params)
 
-
-    # %load_ext line_profiler
     # Run Single Pass Motion Correction
     try:
         if register:
@@ -843,6 +1169,7 @@ def register_and_compress_data(n_clicks):
             input_file = data_name
             import jax
             jax.clear_backends()
+            torch.cuda.empty_cache()
     except Exception as e:
         print(e)
         display("Program crashed.")
@@ -858,15 +1185,15 @@ def register_and_compress_data(n_clicks):
     ##########
   
     #NOTE: this data folder will also contain the location of the TestData
-    data_folder = cache['save_folder'] #results_output_folder[0]
+    data_folder = cache['save_folder'] 
 
     pmd_params_dict = cache['pmd_params']
-    block_height = pmd_params_dict['block_height'] #32 #@param {type:"slider", min:20, max:100, step:4}
-    block_width = pmd_params_dict['block_width'] #32 #@param {type:"slider", min:20, max:100, step:4}
+    block_height = pmd_params_dict['block_height']
+    block_width = pmd_params_dict['block_width'] 
     block_sizes = [block_height, block_width]
 
-    overlaps_height = pmd_params_dict['overlaps_height'] #10 #@param {type:"slider", min:0, max:100, step:1}
-    overlaps_width = pmd_params_dict['overlaps_width'] #10 #@param {type:"slider", min:0, max:100, step:1}
+    overlaps_height = pmd_params_dict['overlaps_height'] 
+    overlaps_width = pmd_params_dict['overlaps_width'] 
 
     if overlaps_height > block_height: 
         print("Overlaps height was set to be greater than block height, which is not valid")
@@ -881,30 +1208,23 @@ def register_and_compress_data(n_clicks):
     overlap = [overlaps_height, overlaps_width]
 
 
-    window_length = pmd_params_dict['window_length'] #6000 #@param {type:"integer"}
+    window_length = pmd_params_dict['window_length'] 
     if window_length <= 0:
         print("Window length cannot be negative! Resetting to 6000")
         window_length = 6000
     start = 0
     end = window_length
 
-    # background_rank = 0
-    background_rank = pmd_params_dict['background_rank'] #15 #@param {type:"slider", min:0, max:100, step:1}
-
-    # rank_prune_factor = 0.25 #@param {type:'slider', min:0, max:1, step:0.01}
-
+    background_rank = pmd_params_dict['background_rank'] 
     deconvolve=True
     deconv_batch=1000
-    # deconvolve=True #@param {type:'boolean'}
-    # deconv_batch=1000  #@param {type:'slider', min:1000, max:30000, step:1000}
 
     ###THESE PARAMS ARE NOT MODIFIED
-    # num_sims = 64
     sim_conf = 5
-    max_rank_per_block = 40 #@param {type:"slider", min:5, max:50, step:1}
+    max_rank_per_block = 40 
 
     #@markdown Keep run_deconv true unless you do not want to run maskNMF demixing
-    run_deconv = True #@param {type:'boolean'}
+    run_deconv = False
     max_components = max_rank_per_block
 
     INPUT_PARAMS = {
@@ -920,10 +1240,6 @@ def register_and_compress_data(n_clicks):
         }
     }
 
-
-    ## PMD: Run the matrix decomposition pipeline 
-
-    ##TODO: Add apriori SVD option
     block_sizes = block_sizes
     overlap = overlap
 
@@ -1049,8 +1365,8 @@ def register_and_compress_data(n_clicks):
             #Write to cache for quick access
             cache['U'] = U
             cache['order'] = order
-            cache['R'] = R
-            cache['V'] = s[:, None]*V[:, :limit]
+            cache['R'] = R * s[None, :]
+            cache['V'] = V
             cache['shape'] = load_obj.shape
             cache['mean_img'] = tiff_loader_obj.mean_img
             cache['noise_var_img'] = tiff_loader_obj.std_img
@@ -1077,7 +1393,7 @@ def register_and_compress_data(n_clicks):
 
 
 
-    tiff_batch_size = 1000
+    tiff_batch_size = 500
     try:
         import jax
         import torch
@@ -1100,7 +1416,8 @@ def register_and_compress_data(n_clicks):
         torch.cuda.empty_cache()
         jax.clear_backends() 
     
-        return None, 0
+        downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
+        return None, 0, dcc.send_file(downloaded_data_file), " "
     except FileNotFoundError:
         print("\n \n \n")
         display("--------ERROR GENERATED, DETAILS BELOW-----")
@@ -1123,33 +1440,148 @@ def register_and_compress_data(n_clicks):
         print(e)
         display("Please re-run the pipeline starting from motion correction.")
 
+        
+def display(msg):
+        """
+        Printing utility that logs time and flushes.
+        """
+        tag = '[' + datetime.datetime.today().strftime('%y-%m-%d %H:%M:%S') + ']: '
+        sys.stdout.write(tag + msg + '\n')
+        sys.stdout.flush()
+
 
 @dash.callback(
-    output=Output("placeholder_demix", "children"),
-    inputs=Input("button_id_demix", "n_clicks"),
-    background=True,
-    running=[
-        (Output("button_id_demix", "disabled"), True, False),
-        (
-            Output("placeholder_demix", "style"),
-            {"visibility": "hidden"},
-            {"visibility": "visible"},
-        ),
-    ],
-    prevent_initial_call=True
+    Output("placeholder_demix", "children"), Output("download_demixing_results", "data"),
+    inputs=Input("button_id_demix", "n_clicks")
 )
 def demix_data(n_clicks):
     '''
     Contains algorithm for ROI detection via maskNMF/superpixels + localnmf demixing (or running superpixel + demixing)
     '''
-    import localnmf_functions
-    from localnmf_functions import run_localnmf_demixing
-    print("results output folder before entering demix data is {}".format(cache['save_folder'])) #results_output_folder[0]))
-    run_localnmf_demixing(cache['save_folder'], cache['localnmf_params'])
     
+    if not cache['PMD_flag']:
+        return dash.no_update
+    else:
+        print("results output folder before entering demix data is {}".format(cache['save_folder'])) 
+        outdir = cache['save_folder']
+        localnmf_params = cache['localnmf_params']
+
+        #This specifies the number of times we run the NMF algorithm on the data. If num_passes = 2 that means we run it once on the PMD data, then subtract the signals and 
+        #re-run on the residual
+        num_passes = localnmf_params['num_passes'] 
+        init=['lnmf' for i in range(num_passes)]
+
+        
+        a = None
+    #This is the data structure we use to pass the data into the dictionary
+        if a is not None:
+            custom_init = dict()
+            custom_init['a'] = a
+            init[0] = 'custom'
+        else:
+            custom_init = None
+
+        cut_off_point=[localnmf_params['superpixels_corr_thr'][i] for i in range(len(localnmf_params['superpixels_corr_thr']))]
+        print(cut_off_point)
+        print("THAT WAS CUT OFF POINT")
+        length_cut=localnmf_params['length_cut']
+        th=localnmf_params['length_cut']
+
+        corr_th_fix=localnmf_params['corr_th_fix'] 
+        switch_point = localnmf_params['switch_point']
+        corr_th_fix_sec = localnmf_params['corr_th_fix_sec']
+        corr_th_del = localnmf_params['corr_th_del']
+
+        max_allow_neuron_size= localnmf_params['max_allow_neuron_size'] #0.15
+        merge_corr_thr= localnmf_params['merge_corr_thr']
+        merge_overlap_thr= localnmf_params['merge_overlap_thr']
+        r =  localnmf_params['r']
+        pseudo_2 = localnmf_params['pseudo_2']
+
+
+
+        
+        residual_cut = localnmf_params['residual_cut'] #[0.5, 0.6, 0.6, 0.6]
+        num_plane= localnmf_params['num_plane']
+        patch_size= localnmf_params['patch_size'] #[100,100]
+        plot_en = localnmf_params['plot_en'] #True
+        text= localnmf_params['text']
+        maxiter= localnmf_params['maxiter']
+        init=init 
+        update_after = localnmf_params['update_after']
+        pseudo_1 = [0, 0, 0, 0]
+        skips= localnmf_params['skips'] #0
+        update_type = "Constant" #Options here are 'Constant' or 'Full'
+        custom_init = custom_init
+        sb = localnmf_params['sb'] #True
+        pseudo_corr = [0, 0, 3/4, 3/4]
+        plot_debug = False
+        denoise = [False for i in range(maxiter)]
+        for k in range(maxiter):
+          if k > 0 and k % 8 == 0:
+            denoise[k] = True
+        batch_size = 100
+
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+
+
+
+        U_sparse = scipy.sparse.csr_matrix(cache['U'])
+        R = cache['R']
+        V = cache['V']
+        data_shape = cache['shape']
+        data_order = cache['order']
+
+        U_sparse =  torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
+        V = torch.Tensor(V).to(device)
+        R = torch.Tensor(R).to(device)
+
+        try:
+            torch.cuda.empty_cache()
+            jax.clear_backends()
+            print("RUNNING DEMIXING")
+
+            rlt = superpixel_analysis_ring.demix_whole_data_robust_ring_lowrank(U_sparse,R,\
+                                    V,data_shape, data_order, r, cut_off_point,\
+                                        length_cut, th, num_passes,\
+                                        residual_cut, corr_th_fix,\
+                                          corr_th_fix_sec, corr_th_del, switch_point,\
+                                        max_allow_neuron_size, merge_corr_thr,\
+                                        merge_overlap_thr, num_plane,\
+                                        patch_size, plot_en, text, maxiter,update_after, \
+                                        pseudo_1, pseudo_2, skips, update_type, init=init,\
+                                        custom_init=custom_init,sb=sb, pseudo_corr = pseudo_corr, plot_debug = plot_debug,\
+                                                                        denoise = denoise, device = device, batch_size = batch_size)
+            
+            display("Clearing memory from run")
+            torch.cuda.empty_cache()
+            jax.clear_backends()
+            
+            
+            fin_rlt = rlt['fin_rlt']
+            fin_rlt['datashape'] = cache['shape']
+            fin_rlt['data_order'] = cache['order']
+            
+            save_path = os.path.join(cache['save_folder'], "demixingresults.npz")
+            np.savez(save_path, final_results = save_path)
+            
+            return dash.no_update, dcc.send_file(save_path)
+        except Exception as e:
+            print("\n \n \n")
+            display("--------ERROR GENERATED, DETAILS BELOW-----")
+            print(e)
+
+
+
+        return dash.no_update
+
+
 
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
-
+    port_number = 8900
+    app.run_server(host='0.0.0.0', debug=True, port=port_number)
