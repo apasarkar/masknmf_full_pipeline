@@ -1584,5 +1584,4 @@ def demix_data(n_clicks):
 
 if __name__ == '__main__':
     port_number = 8900
-    print("using port {}".format(port_number))
     app.run_server(host='0.0.0.0', debug=True, port=port_number)
