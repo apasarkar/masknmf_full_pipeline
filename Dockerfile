@@ -62,8 +62,6 @@ RUN /opt/conda/bin/conda install -y -n base conda-pack \
     && rm /tmp/env.tar \
     && /opt/conda/bin/conda run -n base /venv/bin/conda-unpack
 
-# # ## Runtime Container: 
-
 # # Restart From New Base OS + Standalone Env From Build
 ARG UBUNTU_VERSION
 FROM ${dockername} AS run
@@ -77,5 +75,4 @@ COPY ["./app/*", "./app/"]
 # # Install Any Additional Pipeline-Specific Runtime Dependencies
 RUN apt-get update && xargs -a pkglist-run apt-get install -y --no-install-recommends && rm -rf /var/lib/apt/lists/*  && rm pkglist-run
 
-# ENTRYPOINT ["conda", "run", "-n", "env", "./run_notebook.sh"]
 ENTRYPOINT ["./entrypoint.sh"]
