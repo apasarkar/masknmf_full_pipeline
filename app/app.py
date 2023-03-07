@@ -131,6 +131,7 @@ localnmf_params = {
 cache['mc_params'] = mc_params
 cache['pmd_params'] = pmd_params
 cache['localnmf_params'] = localnmf_params
+cache['demixing_results'] = None
 
 img = np.random.rand(3,50,50)*0
 mc_pmd_vis_frames = [i for i in range(100)]
@@ -171,16 +172,26 @@ fig_pixel_corr = px.imshow(pixel_plot)
 fig_pixel_corr.update_layout(title_text="Pixelwise Correlation Image: No Results Yet", title_x=0.5)
 
 
-pixel_hist_values = []
-pixel_hist_columns = ['correlation values']
-fig_pixel_corr_hist = px.histogram(pixel_hist_values, x=pixel_hist_columns)
-fig_pixel_corr_hist.update_layout(title_text="Pixel Correlation Histogram: No Results Yet", title_x=0.5)
-
 
 
 pixel_plot = np.zeros((40,40))
 fig_superpixel = px.imshow(pixel_plot)
 fig_superpixel.update_layout(title_text="Superpixelization Image: No Results Yet", title_x=0.5)
+
+
+pixel_plot = np.zeros((40, 40))
+fig_post_demixing_summary_image = px.imshow(pixel_plot)
+fig_post_demixing_summary_image.update_layout(title_text="Source Extraction: No Results Yet", title_x=0.5)
+
+trace = np.zeros((200))
+indices = [i for i in range(1, trace.shape[0]+1)]
+trace = pd.DataFrame(trace, columns = ['X'], index = indices)
+fig_post_demixing_pixewise_traces = px.line(trace, y="X", 
+                       labels={
+                     "index": "Frame Number",
+                     "X": "A.U.",
+                 },)
+fig_post_demixing_pixewise_traces.update_layout(title_text="Pixel-wise demixing: No Results Yet", title_x=0.5)
 
 
 
@@ -252,19 +263,7 @@ app.layout = html.Div(
      
      ### Demixing ### 
      dbc.Row(
-        [
-            dbc.Col(
-                [
-                    dcc.Graph(
-                        id='superpixel_plot',
-                        figure=fig_superpixel
-                    ),\
-                    dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks=None,updatemode='drag',step=0.01,\
-                                     value=0.0)
-                ],\
-                width=3
-            ),\
-            
+        [            
             dbc.Col(
                 [
                      dcc.Graph(
@@ -273,23 +272,29 @@ app.layout = html.Div(
                     ),\
                     html.Div(id='placeholder_local_corr_plot', children=""),\
                 ],\
-                width=3
+                width=4
             ),\
             dbc.Col(
                  dcc.Graph(
                         id='local_pixel_corr_plot',
                         figure=fig_pixel_corr
                     ),\
-                width=3
+                width=4
             ),\
             
             dbc.Col(
-                dcc.Graph(
-                    id='local_correlation_histogram',
-                    figure=fig_pixel_corr_hist,
-                ),\
-                width=3
+                [
+                    dcc.Graph(
+                        id='superpixel_plot',
+                        figure=fig_superpixel
+                    ),\
+                    dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks={0:'0', 0.1:'0.1', 0.2:'0.2', 0.3:'0.3', 0.4:'0.4', 0.5:'0.5', 0.6:'0.6',0.7:'0.7', 0.8:'0.8', 0.9:'0.9', 1:'1'},updatemode='drag',step=0.01,\
+                                     value=0.0)
+                ],\
+                width=4
             ),\
+            
+
         ]
     ),\
     dbc.Row(
@@ -298,57 +303,81 @@ app.layout = html.Div(
             dcc.Download(id="download_demixing_results")
         ]
     ),\
+    dbc.Row(
+        [
+            dbc.Col(
+                [
+                    dcc.Graph(
+                        id='post_demixing_summary_image',
+                        figure=fig_post_demixing_summary_image
+                    ),\
+                    html.Div(id='placeholder_post_demixing', children=""),\
+                ],\
+                width=3
+            ),\
+
+            dbc.Col(
+                [
+                    dcc.Graph(
+                        id='post_demixing_pixelwise_traces',
+                        figure=fig_post_demixing_pixewise_traces
+                    ),\
+                ],\
+                width=9
+            ),\
+        ]
+    ),\
     ]
 )
 
 
-
 @app.callback(
-    Output("local_correlation_histogram", "figure"),
-    Output("superpixel_slider", "value"),
-    Input("local_correlation_histogram", "figure"),
-    Input("local_pixel_corr_plot", "relayoutData"),
-    Input("local_pixel_corr_plot", "figure"),
+    Output("post_demixing_summary_image", "figure"),
+    Input("placeholder_post_demixing", "children"),
     prevent_initial_call=True
 )
-def update_corr_pixel_histogram(curr_fig, relayoutData, pixel_fig):
-    button_clicked = list(ctx.triggered_prop_ids.keys())
-    if "local_pixel_corr_plot.relayoutData" in button_clicked or 'local_pixel_corr_plot.figure' in button_clicked:
-        if cache['PMD_flag']:
-            print("the relayout data is {}".format(relayoutData))
-
-            if 'xaxis.autorange' in relayoutData.keys() or 'autosize' in relayoutData.keys():
-                dim1_start = 0
-                dim1_end = cache['shape'][0]
-
-                dim2_start = 0
-                dim2_end = cache['shape'][1]
-            else:
-                print("entered else statement")
-                dim1_end = math.floor(relayoutData['yaxis.range[0]'])
-                dim1_start = min(cache['shape'][0], math.ceil(relayoutData['yaxis.range[1]'])) ##NOTE order is reversed here because of the way plotly represents the info
-                dim2_start = math.floor(relayoutData['xaxis.range[0]'])
-                dim2_end = min(cache['shape'][1], math.ceil(relayoutData['xaxis.range[1]']))
-                print([dim1_start, dim1_end, dim2_start, dim2_end])
-
-
-            used_array = np.array(pixel_fig['data'][0]['z'])
-            print("the shape of used_array is {}".format(used_array.shape))
-            values = used_array[dim1_start:dim1_end, dim2_start:dim2_end].flatten()
-            columns = ['Pixel-wise corr. histogram']
-            df = pd.DataFrame(values, columns=columns)
-            curr_fig = px.histogram(df, x=columns)
-            
-            if 'local_pixel_corr_plot.figure' in button_clicked:
-                #This means we need to set the superpixel value
-                thres = max(0.95, np.percentile(values, 97)) ##TODO: SET THIS MORE INTELLIGENTLY
-                return curr_fig, thres
-            else:
-                return curr_fig, dash.no_update
-        else:
-            return dash.no_update
+def generate_post_demixing_results(children):
+    if cache['PMD_flag']:
+        new_figure = px.imshow(cache['noise_var_img'])
+        new_figure.update(layout_coloraxis_showscale=False)
+        new_figure.update_layout(title_text="Click any pixel to see demixing", title_x=0.5)
+        return new_figure
     else:
         return dash.no_update
+    
+@app.callback(
+    Output("post_demixing_pixelwise_traces", "figure"),
+    Input("post_demixing_summary_image", "clickData"),
+    prevent_initial_call=True
+)
+def plot_demixing_result(clickData):
+    if cache['PMD_flag'] and cache['demixing_results'] is not None:
+
+        fin_rlt = cache['demixing_results']
+        a = scipy.sparse.csr_matrix(fin_rlt['a'])
+        c = fin_rlt['c']
+        
+        x, y = get_points(clickData)
+        temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
+        temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+        desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+        
+        desired_row = (cache['U'].getrow(desired_index).dot(cache['R'])).dot(cache['V']).flatten()
+        AC_trace = a.getrow(desired_index).dot(c.T)
+        
+        input_dict = {"Timesteps": [i for i in range(1, len(desired_row) + 1)], "PMD": desired_row.flatten(), "Signal": AC_trace.flatten()}
+        trace_df = pd.DataFrame.from_dict(input_dict)
+        
+        fig_trace_vis = px.line(trace_df, x='Timesteps', y=trace_df.columns[1:])
+        fig_trace_vis.update_layout(title_text="Demixing at pixel height = {} width = {}".format(y, x), title_x=0.5)
+        
+        return fig_trace_vis
+        
+        
+    else:
+        return dash.no_update
+    
+    
     
     
 
@@ -427,11 +456,12 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
 ### CALLBACKS for CORR img clicking ###
 @app.callback(
     Output("local_correlation_plot", "figure"),
+    Output("superpixel_slider", "value"),
     Input("local_correlation_plot", "figure"), 
     Input("placeholder_local_corr_plot", "children"),
     prevent_initial_call=True
 )
-def compute_local_corr_values(curr_fig, value):
+def compute_local_corr_values_and_init_superpixel_plot(curr_fig, value):
     if cache['PMD_flag']:
         trigger_source = ctx.triggered_id
         print("the compute local corr value trigger source was {}".format(trigger_source))
@@ -455,7 +485,10 @@ def compute_local_corr_values(curr_fig, value):
         local_corr_image = local_correlation_mat(U_sparse, R, V, (d1,d2,T), value, a=None, c=None, order=data_order)
         curr_fig = px.imshow(local_corr_image.squeeze(), zmin=0, zmax=1)
         curr_fig.update_layout(title_text = "Local Robust Correlation Image".format(value),title_x=0.5)
-        return curr_fig
+        
+        #Finally pick the init superpixel value
+        superpixel_threshold = cache['localnmf_params']['superpixels_corr_thr'][0]
+        return curr_fig, superpixel_threshold
     
     else:
         return dash.no_update    
@@ -1417,7 +1450,8 @@ def register_and_compress_data(n_clicks):
         jax.clear_backends() 
     
         downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
-        return None, 0, dcc.send_file(downloaded_data_file), " "
+        # return None, 0, dcc.send_file(downloaded_data_file), " "
+        return None, 0, dash.no_update, " "
     except FileNotFoundError:
         print("\n \n \n")
         display("--------ERROR GENERATED, DETAILS BELOW-----")
@@ -1451,7 +1485,7 @@ def display(msg):
 
 
 @dash.callback(
-    Output("placeholder_demix", "children"), Output("download_demixing_results", "data"),
+    Output("placeholder_demix", "children"), Output("download_demixing_results", "data"), Output("placeholder_post_demixing", "children"),
     inputs=Input("button_id_demix", "n_clicks")
 )
 def demix_data(n_clicks):
@@ -1560,15 +1594,17 @@ def demix_data(n_clicks):
             torch.cuda.empty_cache()
             jax.clear_backends()
             
-            
+
             fin_rlt = rlt['fin_rlt']
             fin_rlt['datashape'] = cache['shape']
             fin_rlt['data_order'] = cache['order']
             
             save_path = os.path.join(cache['save_folder'], "demixingresults.npz")
-            np.savez(save_path, final_results = save_path)
+            np.savez(save_path, final_results = fin_rlt)
+            cache['demixing_results'] = fin_rlt
             
-            return dash.no_update, dcc.send_file(save_path)
+            # return dash.no_update, dcc.send_file(save_path), ""
+            return dash.no_update, dcc.no_update, ""
         except Exception as e:
             print("\n \n \n")
             display("--------ERROR GENERATED, DETAILS BELOW-----")
