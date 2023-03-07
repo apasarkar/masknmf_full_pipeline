@@ -6,6 +6,7 @@ import dash
 from dash import Dash, dcc, html, ctx
 from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
+from dash_bootstrap_templates import load_figure_template
 
 import plotly.express as px
 import pandas as pd
@@ -58,8 +59,8 @@ def list_dir(path):
     print("input to list_dir is {}".format(path))
     return os.listdir(path) + [".."]
 
-
-stylesheets = [dbc.themes.BOOTSTRAP]
+# load_figure_template('LUX')
+stylesheets = [dbc.themes.LUX]
 app = Dash(__name__, background_callback_manager=background_callback_manager, external_stylesheets=stylesheets)
 
 ##Globally used data structures/info
@@ -128,6 +129,7 @@ localnmf_params = {
 }
 
 
+
 cache['mc_params'] = mc_params
 cache['pmd_params'] = pmd_params
 cache['localnmf_params'] = localnmf_params
@@ -142,7 +144,7 @@ img_name_list = ["No Results Yet", "No Results Yet", "No Results Yet"]
 for i, name in enumerate(img_name_list):
     fig_mc_pmd_plots.layout.annotations[i]['text'] = name
     
-    
+   
     
 
 #######
@@ -165,7 +167,7 @@ fig_trace_vis.update_layout(title_text="After running registration + PMD, click 
 
 pixel_plot = np.zeros((40,40))
 fig_local_corr = px.imshow(pixel_plot)
-fig_local_corr.update_layout(title_text="Local Correlation Image: No Results Yet", title_x=0.5)
+fig_local_corr.update_layout(title_text="Noise Variance Image: No Results Yet", title_x=0.5)
 
 pixel_plot = np.zeros((40,40))
 fig_pixel_corr = px.imshow(pixel_plot)
@@ -197,73 +199,111 @@ fig_post_demixing_pixewise_traces.update_layout(title_text="Pixel-wise demixing:
 
 ### End of globally used data structures
 
-controls = [
-    dcc.Dropdown(
+controls = dcc.Dropdown(
         id="dropdown",
         options=[{"label": x, "value": x} for x in list_dir(cache['navigated_folder'])],
         value="",
-        style={'width':'50%', 'margin-top':'20px'},
+        style={'width':'100%', 'margin-top':'20px'},
     )
-]
+
+
+
+
+SIDEBAR_STYLE = {
+    # "position": "fixed",
+    # "top": 0,
+    # "left": 0,
+    # "bottom": 0,
+    # "width": "24rem",
+    # "padding": "2rem 1rem",
+    "background-color": "#f8f9fa",
+    "height":"90vh"
+}
+
+sidebar = html.Div(
+    [
+        html.H2("Preprocessing"),
+        html.Hr(),
+        html.H2(
+            "Step 1: Select File"
+        ),
+        controls,\
+        html.Br(),\
+        html.Br(),\
+        html.H4("File Selected: None",id="folder-files"),\
+        html.H4("Folder: {}".format(cache['navigated_folder']), id="curr_folder"),\
+        html.Br(),\
+        html.Br(),\
+        html.Br(),\
+        html.Br(),\
+        html.Br(),\
+        html.Hr(),\
+        html.H2("Step 2: Register, Compress, Denoise Data "),\
+        html.Div(
+                [
+                    html.Div(id='placeholder', children=""),
+                ]
+        ),\
+        html.Button(id="button_id", children="Run Job!"),\
+        
+    ],
+    style=SIDEBAR_STYLE,
+)
+
+
+sidebar_demixing = html.Div(
+    [
+        html.H2("Step 3: Demixing. Toggle superpixel correlation threshold and hit RUN"),\
+        html.Div(
+                    [
+                        html.Div(id='placeholder_demix', children=""),
+                    ]
+        ),\
+        html.Button(id="button_id_demix", children="Run Job!"),\
+        dcc.Download(id="download_demixing_results")
+    ],
+    style=SIDEBAR_STYLE,
+)
+
+
 
 app.layout = html.Div(
     # [html.H1("File Selected: None"), html.Div(controls), html.Div(id="folder-files")]
     [dbc.Row(
-        html.H1("Please select a multipage tiff file using the dropdown below", style={'margin-top':'20px'})
+        html.H1("maskNMF Data Processing Dashboard", style={'textAlign': 'center'})
     ),\
      dbc.Row(
-        html.H1("File Selected: None",id="folder-files")
+        [
+            dbc.Col(html.Div([sidebar]), width=3),\
+            dbc.Col(
+            [
+                dcc.Graph(
+                    id='example-graph',
+                    figure=fig_mc_pmd_plots
+                ),\
+                dcc.Graph(
+                    id='trace_vis',
+                    figure=fig_trace_vis
+                ),\
+                dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='drag',step=1,\
+                             value=np.argmin(np.abs(100-1)))
+            ], width = 9),\
+        ],\
+        align="center"
     ),\
-     dbc.Row(
-         html.H1("Current Folder: {}".format(cache['navigated_folder']), id="curr_folder")
-    ),\
-     dbc.Row(
-        html.Div(controls)
-    ), \
-    ### Motion Correction Layout## 
      dbc.Row(
     [
-         html.H1("Step 1: Motion Correction + PMD compression and denoising. Specify parameters and hit SUBMIT to run"),\
-         html.Div(
-                [
-                    html.Div(id='placeholder', children=""),
-                ]
-            ),\
-         html.Button(id="button_id", children="Run Job!"),\
+         
          dcc.Download(id="download_elt")
     
     ]
     ),\
      
-    dbc.Row(
-     [
-         dcc.Graph(
-                id='example-graph',
-                figure=fig_mc_pmd_plots
-             ),\
-         dcc.Graph(
-            id='trace_vis',
-            figure=fig_trace_vis
-        ),\
-         dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='drag',step=1,\
-                         value=np.argmin(np.abs(100-1)))
-     ]
-    ),\
-     
-     dbc.Row(
-        [
-            html.H1("Step 2: Demixing. Toggle superpixel correlation threshold and hit RUN"),\
-            html.Div(
-                    [
-                        html.Div(id='placeholder_demix', children=""),
-                    ]
-                ),\
-        ]
-    ),\
-     
+
      ### Demixing ### 
      dbc.Row(
-        [            
+        [      
+            dbc.Col(html.Div([sidebar_demixing]), width=3),\
             dbc.Col(
                 [
                      dcc.Graph(
@@ -272,14 +312,14 @@ app.layout = html.Div(
                     ),\
                     html.Div(id='placeholder_local_corr_plot', children=""),\
                 ],\
-                width=4
+                width=3
             ),\
             dbc.Col(
                  dcc.Graph(
                         id='local_pixel_corr_plot',
                         figure=fig_pixel_corr
                     ),\
-                width=4
+                width=3
             ),\
             
             dbc.Col(
@@ -289,19 +329,15 @@ app.layout = html.Div(
                         figure=fig_superpixel
                     ),\
                     dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks={0:'0', 0.1:'0.1', 0.2:'0.2', 0.3:'0.3', 0.4:'0.4', 0.5:'0.5', 0.6:'0.6',0.7:'0.7', 0.8:'0.8', 0.9:'0.9', 1:'1'},updatemode='drag',step=0.01,\
-                                     value=0.0)
+                                     value=0.0),\
+                    html.H5("Superpixel Correlation Threshold", id="Slider Label")
                 ],\
-                width=4
+                width=3
             ),\
             
 
-        ]
-    ),\
-    dbc.Row(
-        [
-            html.Button(id="button_id_demix", children="Run Job!"),\
-            dcc.Download(id="download_demixing_results")
-        ]
+        ],
+        align="center"
     ),\
     dbc.Row(
         [
@@ -330,6 +366,15 @@ app.layout = html.Div(
     ]
 )
 
+
+# app.layout = html.Div([
+#     dbc.Row([
+#         dbc.Col(sidebar, width=3),  # adjust width
+#         dbc.Col(main_comp, width=12)  # adjust width
+#     ])
+# ])
+
+# app.layout = html.Div([sidebar, main_comp])
 
 @app.callback(
     Output("post_demixing_summary_image", "figure"),
@@ -463,28 +508,29 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
 )
 def compute_local_corr_values_and_init_superpixel_plot(curr_fig, value):
     if cache['PMD_flag']:
-        trigger_source = ctx.triggered_id
-        print("the compute local corr value trigger source was {}".format(trigger_source))
-        value = cache['localnmf_params']['pseudo_2'][0]
-        if torch.cuda.is_available():
-            device = 'cuda'
-        else:
-            device = 'cpu'
+#         trigger_source = ctx.triggered_id
+#         print("the compute local corr value trigger source was {}".format(trigger_source))
+#         value = cache['localnmf_params']['pseudo_2'][0]
+#         if torch.cuda.is_available():
+#             device = 'cuda'
+#         else:
+#             device = 'cpu'
 
-        U_sparse = scipy.sparse.csr_matrix(cache['U'])
-        R = cache['R']
-        V = cache['V']
-        data_shape = cache['shape']
-        (d1,d2,T) = data_shape
-        data_order = cache['order']
+#         U_sparse = scipy.sparse.csr_matrix(cache['U'])
+#         R = cache['R']
+#         V = cache['V']
+#         data_shape = cache['shape']
+#         (d1,d2,T) = data_shape
+#         data_order = cache['order']
 
-        U_sparse =  torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
-        V = torch.Tensor(V).to(device)
-        R = torch.Tensor(R).to(device)
+#         U_sparse =  torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
+#         V = torch.Tensor(V).to(device)
+#         R = torch.Tensor(R).to(device)
         
-        local_corr_image = local_correlation_mat(U_sparse, R, V, (d1,d2,T), value, a=None, c=None, order=data_order)
-        curr_fig = px.imshow(local_corr_image.squeeze(), zmin=0, zmax=1)
-        curr_fig.update_layout(title_text = "Local Robust Correlation Image".format(value),title_x=0.5)
+#         local_corr_image = local_correlation_mat(U_sparse, R, V, (d1,d2,T), value, a=None, c=None, order=data_order)
+        var_img = cache['noise_var_img']
+        curr_fig = px.imshow(var_img.squeeze())
+        curr_fig.update_layout(title_text = "Noise Variance Image".format(value),title_x=0.5)
         
         #Finally pick the init superpixel value
         superpixel_threshold = cache['localnmf_params']['superpixels_corr_thr'][0]
@@ -548,7 +594,7 @@ def compute_superpixel_values(curr_fig, value):
         a, mask_a, c, b, output_dictionary, superpixel_image = superpixel_init(U_sparse,R,V, V_PMD, patch_size, num_plane, data_order, (d1,d2,T), value, residual_cut, length_cut, th, batch_size, pseudo_2, device, text = text, plot_en = plot_en, a = None, c = None)
 
         curr_fig = px.imshow(superpixel_image)
-        curr_fig.update_layout(title_text = "Correlation Image, epsilon = {}".format(value),title_x=0.5)
+        curr_fig.update_layout(title_text = "Superpixels Image, threshold = {}".format(value),title_x=0.5)
         
         ##Update the value
         lnmf_params = cache['localnmf_params']
@@ -590,7 +636,7 @@ def click(clickData):
                      "index": "Frame Number",
                      "X": "A.U.",
                  },)
-        fig_trace_vis.update_layout(title_text="Trace of pixel height = {} width = {}".format(y, x), title_x=0.5)
+        fig_trace_vis.update_layout(title_text="PMD Trace of pixel height = {} width = {}".format(y, x), title_x=0.5)
         
         return fig_trace_vis
 
@@ -632,6 +678,11 @@ def update_motion_image(curr_fig, value):
         print('cache noise variance image max is {}'.format(cache['noise_var_img']))
         used_data = [load_mc_frame(value), get_PMD_frame(value), cache['noise_var_img']]
         
+        max_val = max(np.amax(used_data[0]), np.amax(used_data[1]))
+        
+        if np.amax(used_data[2]) != 0:
+            final_noise_var_img = max_val/(np.amax(used_data[2])) * used_data[2]
+            used_data[2] = final_noise_var_img
 
 
         num_imgs = 3 ##HARDCODED FOR NOW, CHANGE IF NEEDED
@@ -642,7 +693,7 @@ def update_motion_image(curr_fig, value):
 
         print( curr_fig['layout']['annotations'])
         print("ANNOTATIONS")
-        img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-denoised Frame {}".format(value+1), "PMD Noise Variance Image Frame {}".format(value+1)]
+        img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-denoised Frame {}".format(value+1), "Scaled Noise Variance Image Frame {}".format(value+1)]
         for i, name in enumerate(img_name_list):
             curr_fig['layout']['annotations'][i]['text'] = img_name_list[i]
 
@@ -654,13 +705,15 @@ def update_motion_image(curr_fig, value):
 
 
 ### CALLBACKS FOR FILE INPUT
+def get_last_folder_val(folder_string):
+    return folder_string.split("/")[-1]
 
 @app.callback(Output("dropdown", "value"), Output("folder-files", "children"), Output("curr_folder", "children"), Output("dropdown", "options"), Input("dropdown", "value"))
 def list_all_files(folder_name):
 
     #Decide if input is a file or not:
     
-    folder_response = "Current Folder {}"
+    folder_response = "Folder: {}"
     default_value = ""
     
     decided_path = os.path.normpath(os.path.join(cache['navigated_folder'], folder_name))
@@ -674,12 +727,12 @@ def list_all_files(folder_name):
         # present_dir[1] = decided_path
         cache['navigated_file'] = decided_path
         final_dir = [{"label": x, "value": x} for x in list_dir(current_folder)]
-        return default_value, new_text, folder_response.format(current_folder), final_dir
+        return default_value, new_text, folder_response.format(get_last_folder_val(current_folder)), final_dir
     elif is_dir:
         cache['navigated_file'] = cache['no_file_flag']
         cache['navigated_folder'] = decided_path
         final_dir = [{"label": x, "value": x} for x in list_dir(decided_path)]
-        return default_value, "File Selected: None", folder_response.format(cache['navigated_folder']), final_dir
+        return default_value, "File Selected: None", folder_response.format(get_last_folder_val(cache['navigated_folder'])), final_dir
     else:
         raise ValueError("Invalid suggestion")
 
@@ -1603,8 +1656,8 @@ def demix_data(n_clicks):
             np.savez(save_path, final_results = fin_rlt)
             cache['demixing_results'] = fin_rlt
             
-            # return dash.no_update, dcc.send_file(save_path), ""
-            return dash.no_update, dcc.no_update, ""
+            return dash.no_update, dcc.send_file(save_path), ""
+            # return dash.no_update, dash.no_update, ""
         except Exception as e:
             print("\n \n \n")
             display("--------ERROR GENERATED, DETAILS BELOW-----")
