@@ -1450,7 +1450,8 @@ def register_and_compress_data(n_clicks):
         jax.clear_backends() 
     
         downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
-        return None, 0, dcc.send_file(downloaded_data_file), " "
+        # return None, 0, dcc.send_file(downloaded_data_file), " "
+        return None, 0, dash.no_update, " "
     except FileNotFoundError:
         print("\n \n \n")
         display("--------ERROR GENERATED, DETAILS BELOW-----")
@@ -1602,7 +1603,8 @@ def demix_data(n_clicks):
             np.savez(save_path, final_results = fin_rlt)
             cache['demixing_results'] = fin_rlt
             
-            return dash.no_update, dcc.send_file(save_path), ""
+            # return dash.no_update, dcc.send_file(save_path), ""
+            return dash.no_update, dcc.no_update, ""
         except Exception as e:
             print("\n \n \n")
             display("--------ERROR GENERATED, DETAILS BELOW-----")
