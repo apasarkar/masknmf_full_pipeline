@@ -367,14 +367,6 @@ app.layout = html.Div(
 )
 
 
-# app.layout = html.Div([
-#     dbc.Row([
-#         dbc.Col(sidebar, width=3),  # adjust width
-#         dbc.Col(main_comp, width=12)  # adjust width
-#     ])
-# ])
-
-# app.layout = html.Div([sidebar, main_comp])
 
 @app.callback(
     Output("post_demixing_summary_image", "figure"),
@@ -661,8 +653,8 @@ def get_PMD_frame(index):
     URV += cache['mean_img']
     URV -= np.amin(URV)
     return URV
+        
     
-
 @app.callback(Output('example-graph', 'figure'), Input('example-graph', 'figure'), Input("pmd_mc_slider", "value"))
 def update_motion_image(curr_fig, value):
         
@@ -740,7 +732,7 @@ def list_all_files(folder_name):
 
 
 @dash.callback(
-    Output("placeholder", "children"), Output("pmd_mc_slider", "value"), Output("download_elt", "data"), Output("placeholder_local_corr_plot", "children"),
+    Output("placeholder", "children"), Output("pmd_mc_slider", "value"), Output("download_elt", "data"), Output("placeholder_local_corr_plot", "children"), Output("pmd_mc_slider", "max"),
     inputs=Input("button_id", "n_clicks"),
     background=True,
     manager=background_callback_manager,
@@ -797,7 +789,6 @@ def register_and_compress_data(n_clicks):
     #NOTE: this data folder will also contain the location of the TestData
     data_folder = set_and_create_folder_path(cache['navigated_file'], cache['navigated_folder'])
     cache['save_folder'] = data_folder
-    # print("AFTER THE ASSIGNMENT FOR THE OUTPUT FOLDER THE RESULT OF RESULT OUTPUT FOLDER IS {}".format(results_output_folder[0]))
     input_file = cache['navigated_file']#present_dir[1]
 
     mc_params_dict = cache['mc_params']
@@ -1504,7 +1495,7 @@ def register_and_compress_data(n_clicks):
     
         downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
         # return None, 0, dcc.send_file(downloaded_data_file), " "
-        return None, 0, dash.no_update, " "
+        return None, 0, dash.no_update, " ", cache['shape'][2] 
     except FileNotFoundError:
         print("\n \n \n")
         display("--------ERROR GENERATED, DETAILS BELOW-----")
