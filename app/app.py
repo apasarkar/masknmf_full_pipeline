@@ -430,9 +430,7 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
     button_clicked = list(ctx.triggered_prop_ids.keys())[0]
     
     if button_clicked == "local_correlation_plot.clickData":
-        print("local_correlation_plot.clickData was the source of the callback") 
         x, y = get_points(clickData)
-        print("the points obtained are {}".format((x,y)))
         if cache['PMD_flag']:
             if torch.cuda.is_available():
                 device = 'cuda'
@@ -455,9 +453,7 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
         else:
             return dash.no_update
     
-    elif button_clicked== "local_correlation_plot.figure":
-        print("local_correlation_plot.figure was the source of the callback")
-        
+    elif button_clicked== "local_correlation_plot.figure":        
         if cache['PMD_flag']:
             if torch.cuda.is_available():
                 device = 'cuda'
@@ -500,26 +496,6 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
 )
 def compute_local_corr_values_and_init_superpixel_plot(curr_fig, value):
     if cache['PMD_flag']:
-#         trigger_source = ctx.triggered_id
-#         print("the compute local corr value trigger source was {}".format(trigger_source))
-#         value = cache['localnmf_params']['pseudo_2'][0]
-#         if torch.cuda.is_available():
-#             device = 'cuda'
-#         else:
-#             device = 'cpu'
-
-#         U_sparse = scipy.sparse.csr_matrix(cache['U'])
-#         R = cache['R']
-#         V = cache['V']
-#         data_shape = cache['shape']
-#         (d1,d2,T) = data_shape
-#         data_order = cache['order']
-
-#         U_sparse =  torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
-#         V = torch.Tensor(V).to(device)
-#         R = torch.Tensor(R).to(device)
-        
-#         local_corr_image = local_correlation_mat(U_sparse, R, V, (d1,d2,T), value, a=None, c=None, order=data_order)
         var_img = cache['noise_var_img']
         curr_fig = px.imshow(var_img.squeeze())
         curr_fig.update_layout(title_text = "Noise Variance Image".format(value),title_x=0.5)
@@ -546,7 +522,6 @@ def compute_superpixel_values(curr_fig, value):
     TODO: 
     Read parameters in a more principled way -- this boilerplate code is extremely hard to maintain
     '''
-    print("ENTERED COMPUTE SUPERPIXEL_VALUES")
     if cache['PMD_flag']:
         lnmf_params = cache['localnmf_params']
         
@@ -613,7 +588,6 @@ def get_points(clickData):
 )
 def click(clickData):
     x, y = get_points(clickData)
-    print("the points obtained are {}".format((x,y)))
     if cache['PMD_flag']:
         temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
         temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
@@ -638,9 +612,7 @@ def click(clickData):
 
 ### CALLBACKS FOR SCROLLBAR
 def load_mc_frame(index):
-    
     data = np.array(tifffile.imread(cache['navigated_file'], key=index))
-    print("loaded mc frame data shape is {}".format(data.shape))
     return data
 
 def get_PMD_frame(index):
@@ -657,8 +629,6 @@ def get_PMD_frame(index):
     
 @app.callback(Output('example-graph', 'figure'), Input('example-graph', 'figure'), Input("pmd_mc_slider", "value"))
 def update_motion_image(curr_fig, value):
-        
-    print("ENTERED UPDATE MOTION IMAGE")
     if cache['navigated_file'] == cache['no_file_flag']:
         return dash.no_update
     else:
@@ -666,8 +636,6 @@ def update_motion_image(curr_fig, value):
         min_val, max_val = (0, cache['shape'][2]-1)
         value = max(min_val, value)
         value = min(max_val, value)
-
-        print('cache noise variance image max is {}'.format(cache['noise_var_img']))
         used_data = [load_mc_frame(value), get_PMD_frame(value), cache['noise_var_img']]
         
         max_val = max(np.amax(used_data[0]), np.amax(used_data[1]))
@@ -681,10 +649,6 @@ def update_motion_image(curr_fig, value):
         for i in range(3):
             curr_fig['data'][i]['z'] = used_data[i]
 
-        print(list(curr_fig['layout']))
-
-        print( curr_fig['layout']['annotations'])
-        print("ANNOTATIONS")
         img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-denoised Frame {}".format(value+1), "Scaled Noise Variance Image Frame {}".format(value+1)]
         for i, name in enumerate(img_name_list):
             curr_fig['layout']['annotations'][i]['text'] = img_name_list[i]
@@ -1141,8 +1105,6 @@ def register_and_compress_data(n_clicks):
         from jnormcorre import motion_correction
         import math
 
-        print("the value of niter_rig is {}".format(niter_rig))
-
         # Iteratively Run MC On Input File
         display("Running motion correction...")
         target = resolve_dataformats(filename)
@@ -1195,8 +1157,6 @@ def register_and_compress_data(n_clicks):
         mc_dict['max_shifts'] = max_shifts
         mc_dict['splits_els'] = splits
         mc_dict['splits_rig'] = splits
-
-        print("THE MC DICT IS {}".format(mc_dict))
 
 
         corrector = motion_correction.MotionCorrect(target, dview=dview, **mc_dict)
@@ -1560,8 +1520,6 @@ def demix_data(n_clicks):
             custom_init = None
 
         cut_off_point=[localnmf_params['superpixels_corr_thr'][i] for i in range(len(localnmf_params['superpixels_corr_thr']))]
-        print(cut_off_point)
-        print("THAT WAS CUT OFF POINT")
         length_cut=localnmf_params['length_cut']
         th=localnmf_params['length_cut']
 
