@@ -397,6 +397,7 @@ app.layout = html.Div(
 def generate_post_demixing_results(children):
     if cache['PMD_flag']:
         new_figure = px.imshow(cache['noise_var_img'])
+        new_figure.update_coloraxes(showscale=False)
         new_figure.update(layout_coloraxis_showscale=False)
         new_figure.update_layout(title_text="Click any pixel to see demixing", title_x=0.5)
         return new_figure
