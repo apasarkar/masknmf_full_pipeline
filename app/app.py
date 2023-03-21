@@ -7,7 +7,7 @@ from dash import Dash, dcc, html, ctx
 from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
-
+import dash_daq as daq
 import plotly.express as px
 import pandas as pd
 
@@ -75,6 +75,8 @@ cache['navigated_file'] = cache['no_file_flag']
 
 cache['PMD_flag'] = False #Indicates whether PMD has been run or not
 cache['demix_flag'] = False #Indicates whether demixing has been run or not 
+
+cache['register_run_flag'] = True #This flag will be modified if instead do not want to register the data
 
 
 mc_params = {
@@ -220,6 +222,8 @@ SIDEBAR_STYLE = {
     "height":"90vh"
 }
 
+
+
 sidebar = html.Div(
     [
         html.H2("Preprocessing"),
@@ -236,15 +240,32 @@ sidebar = html.Div(
         html.Br(),\
         html.Br(),\
         html.Br(),\
-        html.Br(),\
+        html.Br(id='boolean-switch-dumboutput'),\
         html.Hr(),\
         html.H2("Step 2: Register, Compress, Denoise Data "),\
+        dbc.Row(
+            [
+                dbc.Col(
+                    daq.BooleanSwitch(
+                      on=True,
+                      label="Register Data",
+                      labelPosition="top",
+                      id='register_flag',
+                    ),\
+                    width = 3
+                ),\
+                dbc.Col(
+                    dbc.Button(id="button_id", children="Run Job!"),\
+                    width = 9
+                ),\
+            ]
+        ),\
+        
         html.Div(
                 [
                     html.Div(id='placeholder', children=""),
                 ]
         ),\
-        html.Button(id="button_id", children="Run Job!"),\
         
     ],
     style=SIDEBAR_STYLE,
@@ -259,7 +280,7 @@ sidebar_demixing = html.Div(
                         html.Div(id='placeholder_demix', children=""),
                     ]
         ),\
-        html.Button(id="button_id_demix", children="Run Job!"),\
+        dbc.Button(id="button_id_demix", children="Run Job!"),\
         dcc.Download(id="download_demixing_results")
     ],
     style=SIDEBAR_STYLE,
@@ -693,7 +714,14 @@ def list_all_files(folder_name):
         raise ValueError("Invalid suggestion")
 
 ## MOTION CORRECTION + PMD COMPRESSION CALLBACKS
-
+@dash.callback(
+    Output("boolean-switch-dumboutput","children"), Input("register_flag", "on")
+)
+def change_register_flag(new_mode):
+    print("the new mode of the register flag is {}".format(new_mode))
+    cache['register_run_flag'] = new_mode
+    
+    return dash.no_update
 
 @dash.callback(
     Output("placeholder", "children"), Output("pmd_mc_slider", "value"), Output("download_elt", "data"), Output("placeholder_local_corr_plot", "children"), Output("pmd_mc_slider", "max"),
@@ -757,7 +785,10 @@ def register_and_compress_data(n_clicks):
 
     mc_params_dict = cache['mc_params']
 
-    register = mc_params_dict['register']
+    if cache['register_run_flag']:
+        register = True
+    else:
+        register = False
     devel = mc_params_dict['devel']
 
     dx = mc_params_dict['dx'] 

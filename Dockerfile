@@ -37,7 +37,7 @@ RUN mamba install pip
 RUN mamba install pytorch-sparse -c pyg
 RUN mamba install tqdm scipy pyyaml jupyterlab pillow Cython boto3 -c defaults -c anaconda
 RUN pip install --upgrade "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-RUN pip install jaxopt torchnmf line-profiler pynwb "dash[diskcache]" dash-extensions Flask-Caching dash-bootstrap-components dash-bootstrap-templates git+https://github.com/apasarkar/jnormcorre.git@full_jax git+https://github.com/apasarkar/localmd.git@random_svd_devel git+https://github.com/j-friedrich/OASIS.git@f3ae85e1225bfa4bfe098a3f119246ac1e4f8481#egg=oasis git+https://github.com/apasarkar/masknmf.git@deconv_jax git+https://github.com/apasarkar/rlocalnmf.git@remove_nonneg ipywidgets git+https://github.com/crahan/ipyfilechooser.git opencv-python git+https://github.com/facebookresearch/detectron2.git
+RUN pip install jaxopt torchnmf line-profiler pynwb "dash[diskcache]" dash-extensions Flask-Caching dash-bootstrap-components dash_daq dash-bootstrap-templates git+https://github.com/apasarkar/jnormcorre.git@full_jax git+https://github.com/apasarkar/localmd.git@random_svd_devel git+https://github.com/j-friedrich/OASIS.git@f3ae85e1225bfa4bfe098a3f119246ac1e4f8481#egg=oasis git+https://github.com/apasarkar/masknmf.git@deconv_jax git+https://github.com/apasarkar/rlocalnmf.git@remove_nonneg ipywidgets git+https://github.com/crahan/ipyfilechooser.git opencv-python git+https://github.com/facebookresearch/detectron2.git
 # RUN /opt/conda/bin/conda clean --all --yes \
 #     && apt-get -y remove wget ca-certificates gnupg \
 #     && apt-get -y autoremove \
