@@ -36,7 +36,6 @@ import torch
 import localnmf_functions
 from localnmf_functions import get_single_pixel_corr_img
 import math
-
 import jax
 
 import tifffile
@@ -388,6 +387,19 @@ app.layout = html.Div(
 )
 
 
+def get_a_halos(a):
+    '''
+    Params: 
+        a: np.ndarray. Shape d1, d2, K (3 dimensions), where d1, d2 are the field of view dimensions, and K is the number of neural signals
+    
+    '''
+    a_halos = np.zeros_like(a)
+    for k in range(a.shape[2]):
+        a_halos[:, :, k]= scipy.ndimage.distance_transform_bf(scipy.ndimage.distance_transform_bf(a[:, :, k]))
+
+    return a_halos == 1
+
+
 
 @app.callback(
     Output("post_demixing_summary_image", "figure"),
@@ -396,14 +408,33 @@ app.layout = html.Div(
 )
 def generate_post_demixing_results(children):
     if cache['PMD_flag']:
-        new_figure = px.imshow(cache['noise_var_img'])
+        fin_rlt = cache['demixing_results']
+        a, c, data_order, data_shape = fin_rlt['a'], fin_rlt['c'], fin_rlt['data_order'], fin_rlt['data_shape']
+        ac_mean_image = a.dot(np.mean(c.T, axis = 1, keepdims=True))
+        ac_mean_image = ac_mean_image.reshape((data_shape[0], data_shape[1]), order = data_order)
+        
+        a = a.reshape((data_shape[0], data_shape[1], -1), order = data_order)
+        a_halos = get_a_halos(a)
+    
+        new_figure = px.imshow(ac_mean_image)
+        
+        for k in range(a.shape[2]):
+            curr_img = a_halos[:, :, k]
+            y,x = curr_img.nonzero()
+            new_figure.add_scatter(
+                x=x,
+                y=y,
+                mode='markers', 
+                name="Signal {}".format(k+1),
+                hoveron="points+fills",
+            )
         new_figure.update_coloraxes(showscale=False)
         new_figure.update(layout_coloraxis_showscale=False)
         new_figure.update_layout(title_text="Click any pixel to see demixing", title_x=0.5)
         return new_figure
     else:
         return dash.no_update
-    
+
 @app.callback(
     Output("post_demixing_pixelwise_traces", "figure"),
     Input("post_demixing_summary_image", "clickData"),
@@ -411,12 +442,15 @@ def generate_post_demixing_results(children):
 )
 def plot_demixing_result(clickData):
     if cache['PMD_flag'] and cache['demixing_results'] is not None:
+        print("the clickdata is {}".format(clickData))
 
         fin_rlt = cache['demixing_results']
         a = scipy.sparse.csr_matrix(fin_rlt['a'])
         c = fin_rlt['c']
         
         x, y = get_points(clickData)
+        if y >= cache['shape'][0] or x >= cache['shape'][1]: 
+            print("the click was out of bounds")
         temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
         temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
         desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
@@ -427,7 +461,11 @@ def plot_demixing_result(clickData):
         input_dict = {"Timesteps": [i for i in range(1, len(desired_row) + 1)], "PMD": desired_row.flatten(), "Signal": AC_trace.flatten()}
         trace_df = pd.DataFrame.from_dict(input_dict)
         
-        fig_trace_vis = px.line(trace_df, x='Timesteps', y=trace_df.columns[1:])
+        fig_trace_vis = px.line(trace_df, x='Timesteps', y=trace_df.columns[1:], 
+            color_discrete_map={
+                 "PMD": "#353739",
+                 # "Signal": "#fa8d22"
+             })
         fig_trace_vis.update_layout(title_text="Demixing at pixel height = {} width = {}".format(y, x), title_x=0.5)
         
         return fig_trace_vis
@@ -602,7 +640,7 @@ def get_points(clickData):
     if not clickData:
         raise dash.exceptions.PreventUpdate
     outputs = {k: clickData["points"][0][k] for k in ["x", "y"]}
-    return outputs["x"], outputs["y"]
+    return int(outputs["x"]), int(outputs["y"])
 
 @app.callback(
     Output("trace_vis", "figure"),
