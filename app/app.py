@@ -105,8 +105,9 @@ pmd_params = {
 }
 
 localnmf_params = {
-        'num_passes':1,
-        'superpixels_corr_thr':[0.9, 0.75, 0.9, 0.86],
+        'init': ['custom', 'lnmf', 'lnmf', 'lnmf'],
+        'num_passes':2,
+        'superpixels_corr_thr':[0.9, 0.85, 0.9, 0.86],
         'length_cut':[3,5,2,2],
         'th':[2,2,2,2],
         'pseudo_2':[0.1, 0.1, 0.1, 0.1],
@@ -123,7 +124,7 @@ localnmf_params = {
         'patch_size': [100,100],
         'maxiter': 10,
         'update_after':4, 
-        'plot_en': True,
+        'plot_en': False,
         'skips':0,
         'text': True,
         'sb': True,
@@ -279,12 +280,25 @@ sidebar_demixing = html.Div(
                         html.Div(id='placeholder_demix', children=""),
                     ]
         ),\
-        dbc.Button(id="button_id_demix", children="Run Job!"),\
+        dbc.Row(
+           [
+               dbc.Col(
+                   daq.BooleanSwitch(
+                      on=True,
+                      label="Dense Data",
+                      labelPosition="top",
+                      id='masknmf_flag',
+                    ),\
+                   width=3
+               ),\
+               dbc.Col(dbc.Button(id="button_id_demix", children="Run Job!"), width=9)
+           ]
+        ),\
+        html.Br(id='boolean-switch-demix'),\
         dcc.Download(id="download_demixing_results")
     ],
     style=SIDEBAR_STYLE,
 )
-
 
 
 app.layout = html.Div(
@@ -1331,7 +1345,7 @@ def register_and_compress_data(n_clicks):
     max_rank_per_block = 40 
 
     #@markdown Keep run_deconv true unless you do not want to run maskNMF demixing
-    run_deconv = False
+    run_deconv = True
     max_components = max_rank_per_block
 
     INPUT_PARAMS = {
@@ -1423,7 +1437,6 @@ def register_and_compress_data(n_clicks):
                             batching=5, dtype="float32",  order="F", corrector = None):
 
         from localmd.decomposition import localmd_decomposition, display
-        from masknmf.engine.sparsify import get_factorized_projection
         import localmd.tiff_loader as tiff_loader
         import scipy
         import scipy.sparse
@@ -1435,6 +1448,7 @@ def register_and_compress_data(n_clicks):
         import functools
         from functools import partial
         import time
+        import torch
 
         start, end = frame_range[0], frame_range[1]
 
@@ -1446,22 +1460,11 @@ def register_and_compress_data(n_clicks):
                                          num_workers=0, frame_corrector_obj = corrector)
 
 
-        ## Step 2h: Run deconvolution:
-        limit = 5000
-        if run_deconv:
-            np.savez("Deconvolution_Testing.npz", U=U, R=R, s=s, V=V, batch_size=deconv_batch, allow_pickle=True)
-            deconv_components = get_factorized_projection(
-              U,
-              R,
-              s[:, None] * V[:, :limit],
-              batch_size=deconv_batch
-          )
-        else:
-            display("WARNING: YOU ARE NOT USING THE DECONVOLUTION STEP, MASKNMF WILL NOT PERFORM AS WELL.")
-            deconv_components = s[:, None] * V[:, :limit]
+
+        
             
         
-        def save_decomposition(U, R, s, V, deconvolved_temporal, load_obj, folder, order="F"):
+        def save_decomposition(U, R, s, V, load_obj, folder, order="F"):
             '''
             Write results to temporary location 
             
@@ -1472,7 +1475,9 @@ def register_and_compress_data(n_clicks):
             #Write to cache for quick access
             cache['U'] = U
             cache['order'] = order
+            cache['R_orig'] = R
             cache['R'] = R * s[None, :]
+            cache['s'] = s
             cache['V'] = V
             cache['shape'] = load_obj.shape
             cache['mean_img'] = tiff_loader_obj.mean_img
@@ -1488,7 +1493,6 @@ def register_and_compress_data(n_clicks):
                 R = R, \
                 s = s, \
                 Vt = V, \
-                deconvolved_temporal=deconvolved_temporal, \
                  mean_img = tiff_loader_obj.mean_img, \
                  noise_var_img = tiff_loader_obj.std_img)
 
@@ -1496,7 +1500,7 @@ def register_and_compress_data(n_clicks):
 
 
         ##Step 2i: Save the results: 
-        save_decomposition(U.tocsr(), R, s, V, deconv_components, tiff_loader_obj, folder, order=order)
+        save_decomposition(U.tocsr(), R, s, V, tiff_loader_obj, folder, order=order)
 
 
 
@@ -1559,6 +1563,200 @@ def display(msg):
 
 
 @dash.callback(
+    Output("boolean-switch-demix","children"), Input("masknmf_flag", "on")
+)
+def change_init_settings(new_mode):
+    print("the new mode of the dense initialization is {}".format(new_mode))
+    localnmf_params = cache['localnmf_params']
+    init_method = localnmf_params['init']
+    if new_mode:
+        init_method[0] = 'custom'
+    else:
+        init_method[0] = 'lnmf'
+        
+    localnmf_params['init'] = init_method
+    cache['localnmf_params'] = localnmf_params
+    
+    return dash.no_update
+        
+        
+#Eventually move this to another file (masknmf file)
+def dense_init_pipeline():
+    from masknmf.engine.sparsify import get_factorized_projection
+    import torch
+    import jax
+    if torch.cuda.is_available():
+        cpu_only=False
+        device='cuda'
+    else:
+        cpu_only=True
+        device = 'cpu'
+    #Step 1 run deconvolution
+    display("running temporal sparsening operation")
+    deconv_batch = 1000
+    deconv_components = get_factorized_projection(
+          cache['U'],
+          cache['R_orig'],
+          cache['s'][:, None] * cache['V'],
+          batch_size=deconv_batch, device=device).astype(np.float64)
+    
+    cache['deconvolved_temporal'] = deconv_components
+
+    
+    display('running masknmf dense init pipeline')
+    confidence = 0.6
+    allowed_overlap = 70
+    
+
+   
+        
+    block_dims_x = 20 
+    block_dims_y = 20 
+    frame_len = 100
+    
+    spatial_thresholds_1 = 0.7
+    spatial_thresholds_2 = 0.7
+
+    spatial_thresholds = [spatial_thresholds_1, spatial_thresholds_2]
+
+
+    a = run_masknmf(cache['save_folder'], confidence, allowed_overlap, cpu_only,\
+                block_dims_x, block_dims_y, frame_len, spatial_thresholds)
+
+    return a
+
+    
+    
+
+def run_masknmf(data_folder, confidence, allowed_overlap, cpu_only,\
+                block_dims_x, block_dims_y, frame_len, spatial_thresholds):
+
+    
+    ## TODO: For organizational purposes move the imports to the top
+    import torch
+    import torch_sparse
+    import sys
+
+    import copy
+    #Misc imports
+    import matplotlib.pyplot as plt
+    import matplotlib.cm as cm
+    import matplotlib as mpl
+    import colorsys
+    from matplotlib import patches,  lines
+    from matplotlib.patches import Polygon
+    import shutil
+    import time
+    import os
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from skimage import io
+    import skimage
+    from skimage import measure
+    from skimage import filters
+
+    import random
+    import numpy as np
+    import os
+    import skimage.io as io
+
+    import torch_sparse
+
+    import scipy
+    import scipy.sparse
+
+
+    import boto3
+    from botocore.config import Config
+    from botocore import UNSIGNED
+
+    from masknmf.engine.segmentation import segment_local_UV, filter_components_UV
+    from masknmf.detection.maskrcnn_detector import maskrcnn_detector
+
+
+    U_sparse = cache['U']
+
+    order = cache['order']
+    shape = cache['shape']
+    d1,d2 = shape[:2]
+    T = shape[2]
+    dims = (d1, d2, T)
+    temporal_components = cache['deconvolved_temporal']
+    mixing_weights = cache['R_orig']
+
+
+    #This is where we create the neural network
+    dir_path = "neuralnet_info" 
+
+    #Specify where to save these outputs
+    MASK_NMF_CONFIG = os.path.join(dir_path, "config_nn.yaml")
+    MASK_NMF_MODEL = os.path.join(dir_path, "model_final.pth")
+
+    #Specify where to retrieve the neural net data. In this case, in the apasarkar-public bucket on AWS S3
+    bucket_loc = "apasarkar-public"
+    config_file_name = "config.yaml"
+    weights_file_name = "model_final.pth"
+
+
+
+    if not os.path.isdir("neuralnet_info"):
+      os.mkdir("neuralnet_info")
+
+
+    s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
+    s3.download_file(bucket_loc,
+                  config_file_name,
+                  MASK_NMF_CONFIG)
+    s3.download_file(bucket_loc,
+                  weights_file_name,
+                  MASK_NMF_MODEL)
+
+
+
+    model = maskrcnn_detector(MASK_NMF_MODEL,
+                                MASK_NMF_CONFIG,
+                                confidence,
+                                allowed_overlap,
+                                cpu_only, order=order)
+
+    
+
+    ##END OF PARAMETER DEFINITION
+
+
+
+    if temporal_components is None:
+      raise ValueError("Deconvolution was not run on this PMD output. Re-run PMD with deconv")
+
+
+    # Run Detection On Select Frames
+    print("Performing MaskRCNN detection...")
+    bin_masks, footprints, properties, _ = segment_local_UV(
+      U_sparse,
+      mixing_weights,
+      temporal_components,
+      tuple((d1, d2, temporal_components.shape[-1])),
+      model,
+      frame_len,
+      block_size=(block_dims_x, block_dims_y),
+      order=order
+    )
+
+    print("Filtering detected components...")
+    keep_masks = filter_components_UV(
+          footprints, bin_masks, properties,
+          spatial_thresholds[0], spatial_thresholds[1])
+    print(f"Filtering completed {keep_masks.shape} of {np.count_nonzero(keep_masks)} components retained")
+
+    a_dense = np.asarray(footprints[:, keep_masks].todense())
+    # a_dense = np.asarray(footprints.todense())
+    a = a_dense.reshape((d1, d2, -1), order=order)
+
+    np.savez("TEMPDECONVRESULTS.npz", a=a)
+    return a
+  
+        
+@dash.callback(
     Output("placeholder_demix", "children"), Output("download_demixing_results", "data"), Output("placeholder_post_demixing", "children"),
     inputs=Input("button_id_demix", "n_clicks")
 )
@@ -1577,15 +1775,17 @@ def demix_data(n_clicks):
         #This specifies the number of times we run the NMF algorithm on the data. If num_passes = 2 that means we run it once on the PMD data, then subtract the signals and 
         #re-run on the residual
         num_passes = localnmf_params['num_passes'] 
-        init=['lnmf' for i in range(num_passes)]
+        init = localnmf_params['init']
 
-        
-        a = None
-    #This is the data structure we use to pass the data into the dictionary
+        if init[0] == 'custom':
+            pass
+            a = dense_init_pipeline()
+        else: 
+            a = None
+                  
         if a is not None:
             custom_init = dict()
             custom_init['a'] = a
-            init[0] = 'custom'
         else:
             custom_init = None
 
@@ -1645,42 +1845,42 @@ def demix_data(n_clicks):
         V = torch.Tensor(V).to(device)
         R = torch.Tensor(R).to(device)
 
-        try:
-            torch.cuda.empty_cache()
-            jax.clear_backends()
-            print("RUNNING DEMIXING")
+        # try:
+        torch.cuda.empty_cache()
+        jax.clear_backends()
+        print("RUNNING DEMIXING")
 
-            rlt = superpixel_analysis_ring.demix_whole_data_robust_ring_lowrank(U_sparse,R,\
-                                    V,data_shape, data_order, r, cut_off_point,\
-                                        length_cut, th, num_passes,\
-                                        residual_cut, corr_th_fix,\
-                                          corr_th_fix_sec, corr_th_del, switch_point,\
-                                        max_allow_neuron_size, merge_corr_thr,\
-                                        merge_overlap_thr, num_plane,\
-                                        patch_size, plot_en, text, maxiter,update_after, \
-                                        pseudo_1, pseudo_2, skips, update_type, init=init,\
-                                        custom_init=custom_init,sb=sb, pseudo_corr = pseudo_corr, plot_debug = plot_debug,\
-                                                                        denoise = denoise, device = device, batch_size = batch_size)
-            
-            display("Clearing memory from run")
-            torch.cuda.empty_cache()
-            jax.clear_backends()
-            
+        rlt = superpixel_analysis_ring.demix_whole_data_robust_ring_lowrank(U_sparse,R,\
+                                V,data_shape, data_order, r, cut_off_point,\
+                                    length_cut, th, num_passes,\
+                                    residual_cut, corr_th_fix,\
+                                      corr_th_fix_sec, corr_th_del, switch_point,\
+                                    max_allow_neuron_size, merge_corr_thr,\
+                                    merge_overlap_thr, num_plane,\
+                                    patch_size, plot_en, text, maxiter,update_after, \
+                                    pseudo_1, pseudo_2, skips, update_type, init=init,\
+                                    custom_init=custom_init,sb=sb, pseudo_corr = pseudo_corr, plot_debug = plot_debug,\
+                                                                    denoise = denoise, device = device, batch_size = batch_size)
 
-            fin_rlt = rlt['fin_rlt']
-            fin_rlt['datashape'] = cache['shape']
-            fin_rlt['data_order'] = cache['order']
-            
-            save_path = os.path.join(cache['save_folder'], "demixingresults.npz")
-            np.savez(save_path, final_results = fin_rlt)
-            cache['demixing_results'] = fin_rlt
-            
-            return dash.no_update, dcc.send_file(save_path), ""
+        display("Clearing memory from run")
+        torch.cuda.empty_cache()
+        jax.clear_backends()
+
+
+        fin_rlt = rlt['fin_rlt']
+        fin_rlt['datashape'] = cache['shape']
+        fin_rlt['data_order'] = cache['order']
+
+        save_path = os.path.join(cache['save_folder'], "demixingresults.npz")
+        np.savez(save_path, final_results = fin_rlt)
+        cache['demixing_results'] = fin_rlt
+
+        return dash.no_update, dcc.send_file(save_path), ""
             # return dash.no_update, dash.no_update, ""
-        except Exception as e:
-            print("\n \n \n")
-            display("--------ERROR GENERATED, DETAILS BELOW-----")
-            print(e)
+        # except Exception as e:
+        #     print("\n \n \n")
+        #     display("--------ERROR GENERATED, DETAILS BELOW-----")
+        #     print(e)
 
 
 
