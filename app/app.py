@@ -38,6 +38,8 @@ from localnmf_functions import get_single_pixel_corr_img
 import math
 import jax
 
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".70"
+
 import tifffile
 
 ### PRODUCTION VS NON PRODUCTION WORKER MANAGEMENT 
@@ -50,7 +52,11 @@ import tifffile
 # else:
 # Diskcache for non-production apps when developing locally
 import diskcache
-cache = diskcache.Cache("./cache")
+
+large_cache_size = 1073741824 * 15
+cache = diskcache.Cache("./cache", size_limit = large_cache_size )
+
+print("THE DEFAULT SIZE OF CACHE IS {}".format(cache.size_limit))
 background_callback_manager = DiskcacheManager(cache)
 
 
@@ -827,7 +833,7 @@ def register_and_compress_data(n_clicks):
         final_path = os.path.join(data_folder, new_folder_name)
         if not os.path.exists(final_path):
             os.mkdir(final_path)
-        print("creating folder at location {} in gdrive".format(final_path))
+        print("creating folder at location {}".format(final_path))
         return final_path
 
 
@@ -1505,52 +1511,30 @@ def register_and_compress_data(n_clicks):
 
 
     tiff_batch_size = 500
-    try:
-        import jax
-        import torch
-        jax.clear_backends()
-        torch.cuda.empty_cache()
-        params = load_config(INPUT_PARAMS)
-        print(params)
-        write_params(os.path.join(outdir, "CompressionConfig.yaml"),
-                    default=INPUT_PARAMS,
-                    **params)
+    import jax
+    import torch
+    jax.clear_backends()
+    torch.cuda.empty_cache()
+    params = load_config(INPUT_PARAMS)
+    print(params)
+    write_params(os.path.join(outdir, "CompressionConfig.yaml"),
+                default=INPUT_PARAMS,
+                **params)
 
-        import localmd
-        from localmd.decomposition import threshold_heuristic
-        from localmd import tiff_loader
-        from jnormcorre.motion_correction import frame_corrector 
-        from masknmf.engine.sparsify import get_factorized_projection
-        pmdresults = perform_localmd_pipeline(input_file, block_sizes, overlap, [start, end], background_rank, \
-                              max_components, sim_conf, tiff_batch_size,deconv_batch,data_folder, pixel_batch_size=100, run_deconv=run_deconv,\
-                              batching=5, dtype="float32",  order="F", corrector = corrector)
-        torch.cuda.empty_cache()
-        jax.clear_backends() 
-    
-        downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
-        # return None, 0, dcc.send_file(downloaded_data_file), " "
-        return None, 0, dash.no_update, " ", cache['shape'][2] 
-    except FileNotFoundError:
-        print("\n \n \n")
-        display("--------ERROR GENERATED, DETAILS BELOW-----")
-        display("The file was not located. Please consider specifying the file again (step 0) and run the entire pipeline from the start\
-        (Motion Correction)")
-        import jax
-        import torch
-        jax.clear_backends()
-        torch.cuda.empty_cache()
-        display("Cleared memory")
-    except Exception as e:
-        print("\n \n \n")
-        display("--------ERROR GENERATED, DETAILS BELOW-----")
-        display("Unexpected error, please report")
-        import jax
-        import torch
-        jax.clear_backends()
-        torch.cuda.empty_cache()
-        display("Cleared backends")
-        print(e)
-        display("Please re-run the pipeline starting from motion correction.")
+    import localmd
+    from localmd.decomposition import threshold_heuristic
+    from localmd import tiff_loader
+    from jnormcorre.motion_correction import frame_corrector 
+    from masknmf.engine.sparsify import get_factorized_projection
+    pmdresults = perform_localmd_pipeline(input_file, block_sizes, overlap, [start, end], background_rank, \
+                          max_components, sim_conf, tiff_batch_size,deconv_batch,data_folder, pixel_batch_size=100, run_deconv=run_deconv,\
+                          batching=5, dtype="float32",  order="F", corrector = corrector)
+    torch.cuda.empty_cache()
+    jax.clear_backends() 
+
+    downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
+    # return None, 0, dcc.send_file(downloaded_data_file), " "
+    return None, 0, dash.no_update, " ", cache['shape'][2] 
 
         
 def display(msg):
@@ -1612,7 +1596,7 @@ def dense_init_pipeline():
         
     block_dims_x = 20 
     block_dims_y = 20 
-    frame_len = 100
+    frame_len = 30
     
     spatial_thresholds_1 = 0.7
     spatial_thresholds_2 = 0.7
@@ -1751,8 +1735,6 @@ def run_masknmf(data_folder, confidence, allowed_overlap, cpu_only,\
     a_dense = np.asarray(footprints[:, keep_masks].todense())
     # a_dense = np.asarray(footprints.todense())
     a = a_dense.reshape((d1, d2, -1), order=order)
-
-    np.savez("TEMPDECONVRESULTS.npz", a=a)
     return a
   
         
@@ -1892,4 +1874,4 @@ def demix_data(n_clicks):
 
 if __name__ == '__main__':
     port_number = 8900
-    app.run_server(host='0.0.0.0', debug=True, port=port_number)
+    app.run_server(host='0.0.0.0',debug=True, port=port_number)
