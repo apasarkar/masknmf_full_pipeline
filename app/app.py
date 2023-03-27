@@ -142,6 +142,8 @@ cache['mc_params'] = mc_params
 cache['pmd_params'] = pmd_params
 cache['localnmf_params'] = localnmf_params
 cache['demixing_results'] = None
+cache['first_pass_init_method'] = 'masknmf'
+
 
 img = np.random.rand(3,50,50)*0
 mc_pmd_vis_frames = [i for i in range(100)]
@@ -208,7 +210,7 @@ fig_pixel_corr.update_layout(title_text="Pixelwise Correlation Image: No Results
 
 pixel_plot = np.zeros((40,40))
 fig_superpixel = px.imshow(pixel_plot)
-fig_superpixel.update_layout(title_text="Superpixelization Image: No Results Yet", title_x=0.5)
+fig_superpixel.update_layout(title_text="Initialization Image: No Results Yet", title_x=0.5)
 
 
 pixel_plot = np.zeros((40, 40))
@@ -478,6 +480,31 @@ app.layout = html.Div(
     ]
 )
 
+
+
+
+
+#######
+## First init callback logic
+#######
+
+@app.callback(
+    Output("superpixel_slider", "disabled"),
+    Input("masknmf_flag", "on")
+)
+def switch_superpixel_slider_enable(flag):
+    
+    #In this case, masknmf_flag is ON, so the superpixel slider should be disabled
+    if flag: 
+        return True 
+    #In this case, masknmf_flag is OFF, so the superpixel slider should be enabled
+    else:
+        return False
+        cache['first_pass_init_method'] = 'superpixel'
+
+#######
+### Post init callback logic
+#######
 
 def get_a_halos(a):
     '''
@@ -881,6 +908,7 @@ def change_register_flag(new_mode):
     
     return dash.no_update
 
+None, 0, dash.no_update, " ", cache['shape'][2] 
 @dash.callback(
     Output("placeholder", "children"), Output("pmd_mc_slider", "value"), Output("download_elt", "data"), Output("placeholder_local_corr_plot", "children"), Output("pmd_mc_slider", "max"),
     inputs=Input("button_id", "n_clicks"),
@@ -1649,7 +1677,6 @@ def display(msg):
     Output("boolean-switch-demix","children"), Input("masknmf_flag", "on")
 )
 def change_init_settings(new_mode):
-    print("the new mode of the dense initialization is {}".format(new_mode))
     localnmf_params = cache['localnmf_params']
     init_method = localnmf_params['init']
     if new_mode:
