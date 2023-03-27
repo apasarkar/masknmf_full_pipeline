@@ -166,7 +166,7 @@ block_pmd_1 = html.Div(
 
 block_pmd_2 = html.Div(
     [
-        html.P("Pick width block dimension betwen 10 and 50"),
+        html.P("Pick width block dimension between 10 and 50"),
         dbc.Input(type="number",id="block_pmd_2", min=10, max=50, value=pmd_params['block_width'], step=1),
     ],
 )
@@ -333,6 +333,16 @@ sidebar_demixing = html.Div(
                     ]
         ),\
         dbc.Row(
+            [
+             dbc.Col(
+                [
+                     html.H5('''Select an initialization method. By default, the dense init will be run. To run the superpixels init instead, turn off the dense init and specify a superpixel threshold.''', style={'textAlign':'center'}),\
+                ],\
+                 width = 12
+             ),\
+            ]
+        ),\
+        dbc.Row(
            [
                dbc.Col(
                    daq.BooleanSwitch(
@@ -343,8 +353,25 @@ sidebar_demixing = html.Div(
                     ),\
                    width=3
                ),\
-               dbc.Col(dbc.Button(id="button_id_demix", children="Run Job!"), width=9)
+               
+               dbc.Col(
+                [ 
+                   dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks={0:'0', 0.1:'0.1', 0.2:'0.2', 0.3:'0.3', 0.4:'0.4', 0.5:'0.5', 0.6:'0.6',0.7:'0.7', 0.8:'0.8', 0.9:'0.9', 1:'1'},updatemode='drag',step=0.01,\
+                                     value=0.0, disabled=True),\
+                    html.H5("Superpixel Threshold", id="Slider Label", style={'textAlign': 'center'}),\
+                ],\
+                   width=9
+               ),\
            ]
+        ),\
+        dbc.Row(
+            [
+                dbc.Col(
+                    [
+                        dbc.Button(id="button_id_demix", children="Run Job!"),\
+                    ],\
+                        width=12),\
+            ]
         ),\
         html.Br(id='boolean-switch-demix'),\
         dcc.Download(id="download_demixing_results")
@@ -414,9 +441,6 @@ app.layout = html.Div(
                         id='superpixel_plot',
                         figure=fig_superpixel
                     ),\
-                    dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks={0:'0', 0.1:'0.1', 0.2:'0.2', 0.3:'0.3', 0.4:'0.4', 0.5:'0.5', 0.6:'0.6',0.7:'0.7', 0.8:'0.8', 0.9:'0.9', 1:'1'},updatemode='drag',step=0.01,\
-                                     value=0.0),\
-                    html.H5("Superpixel Correlation Threshold", id="Slider Label")
                 ],\
                 width=3
             ),\
