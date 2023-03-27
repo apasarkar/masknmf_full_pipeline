@@ -365,7 +365,7 @@ sidebar_demixing = html.Div(
                
                dbc.Col(
                 [ 
-                   dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks={0:'0', 0.1:'0.1', 0.2:'0.2', 0.3:'0.3', 0.4:'0.4', 0.5:'0.5', 0.6:'0.6',0.7:'0.7', 0.8:'0.8', 0.9:'0.9', 1:'1'},updatemode='drag',step=0.01,\
+                   dash.dcc.Slider(id='superpixel_slider',min=0.00,max=0.999,marks={0:'0', 0.1:'0.1', 0.2:'0.2', 0.3:'0.3', 0.4:'0.4', 0.5:'0.5', 0.6:'0.6',0.7:'0.7', 0.8:'0.8', 0.9:'0.9', 1:'1'},updatemode='mouseup',step=0.01,\
                                      value=0.0, disabled=True),\
                     html.H5("Superpixel Threshold", id="Slider Label", style={'textAlign': 'center'}),\
                 ],\
@@ -408,7 +408,7 @@ app.layout = html.Div(
                     id='trace_vis',
                     figure=fig_trace_vis
                 ),\
-                dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='drag',step=1,\
+                dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='mouseup',step=1,\
                              value=np.argmin(np.abs(100-1)))
             ], width = 9),\
         ],\
