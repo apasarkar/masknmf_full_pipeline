@@ -101,8 +101,8 @@ mc_params = {
 }
 
 pmd_params = {
-    'block_height':32,
-    'block_width':32,
+    'block_height':20,
+    'block_width':20,
     'overlaps_height':10,
     'overlaps_width':10,
     'window_length':6000,
@@ -153,6 +153,28 @@ for i, name in enumerate(img_name_list):
     fig_mc_pmd_plots.layout.annotations[i]['text'] = name
     
    
+###########
+## MC + PMD dash components
+###########
+
+block_pmd_1 = html.Div(
+    [
+        html.P("Pick height block dimension between 10 and 50"),
+        dbc.Input(type="number", id="block_pmd_1", min=10, max=50, value = pmd_params['block_height'], step=1),
+    ],
+)
+
+block_pmd_2 = html.Div(
+    [
+        html.P("Pick width block dimension betwen 10 and 50"),
+        dbc.Input(type="number",id="block_pmd_2", min=10, max=50, value=pmd_params['block_width'], step=1),
+    ],
+)
+
+block_pmd_placeholder_1 = html.Div(id='block_pmd_placeholder_1', children="")
+block_pmd_placeholder_2 = html.Div(id='block_pmd_placeholder_2', children="")
+    
+    
     
 
 #######
@@ -249,6 +271,30 @@ sidebar = html.Div(
         html.Br(id='boolean-switch-dumboutput'),\
         html.Hr(),\
         html.H2("Step 2: Register, Compress, Denoise Data "),\
+        dbc.Row(
+            [
+                dbc.Col(
+                    block_pmd_1,
+                    width=6,
+                ),\
+                dbc.Col(
+                    block_pmd_2,
+                    width=6,
+                ),\
+            ]
+        ),\
+        dbc.Row(
+            [
+                dbc.Col(
+                    block_pmd_placeholder_1,
+                    width=6,
+                ),\
+                dbc.Col(
+                    block_pmd_placeholder_2,
+                    width=6,
+                ),\
+            ]
+        ),\
         dbc.Row(
             [
                 dbc.Col(
@@ -772,7 +818,34 @@ def list_all_files(folder_name):
     else:
         raise ValueError("Invalid suggestion")
 
+        
+##########
 ## MOTION CORRECTION + PMD COMPRESSION CALLBACKS
+##########
+
+@dash.callback(
+    Output("block_pmd_placeholder_1", "children"),
+    Input("block_pmd_1", "value")
+)
+def update_pmd_blocksize_height(value):
+    new_pmd_params = cache['pmd_params']
+    new_pmd_params['block_height'] = value
+    cache['pmd_params'] = new_pmd_params
+    
+    return dash.no_update
+
+
+@dash.callback(
+    Output("block_pmd_placeholder_2", "children"),
+    Input("block_pmd_2", "value")
+)
+def update_pmd_blocksize_width(value):
+    new_pmd_params = cache['pmd_params']
+    new_pmd_params['block_width'] = value
+    cache['pmd_params'] = new_pmd_params
+    
+    return dash.no_update
+
 @dash.callback(
     Output("boolean-switch-dumboutput","children"), Input("register_flag", "on")
 )
