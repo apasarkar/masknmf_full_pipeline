@@ -535,13 +535,14 @@ def generate_post_demixing_results(children):
     if cache['PMD_flag']:
         fin_rlt = cache['demixing_results']
         a, c, data_order, data_shape = fin_rlt['a'], fin_rlt['c'], fin_rlt['data_order'], fin_rlt['data_shape']
-        ac_mean_image = a.dot(np.mean(c.T, axis = 1, keepdims=True))
-        ac_mean_image = ac_mean_image.reshape((data_shape[0], data_shape[1]), order = data_order)
+        # ac_mean_image = a.dot(np.mean(c.T, axis = 1, keepdims=True))
+        # ac_mean_image = ac_mean_image.reshape((data_shape[0], data_shape[1]), order = data_order)
+        background_image = cache['mean_img']
         
         a = a.reshape((data_shape[0], data_shape[1], -1), order = data_order)
         a_halos = get_a_halos(a)
     
-        new_figure = px.imshow(ac_mean_image)
+        new_figure = px.imshow(background_image)
         
         for k in range(a.shape[2]):
             curr_img = a_halos[:, :, k]
