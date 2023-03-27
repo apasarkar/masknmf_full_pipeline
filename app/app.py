@@ -369,12 +369,11 @@ sidebar_demixing = html.Div(
             [
                 dbc.Col(
                     [
-                        dbc.Button(id="button_id_demix", children="Run Job!"),\
+                        dbc.Button(id="button_id_demix", children="Run Job!", style={'verticalalign':'center'}),\
                     ],\
-                width=12
+                    width={"size": 6, "offset": 4},
                 ),\
             ],\
-            justify="evenly"
         ),\
         html.Br(id='boolean-switch-demix'),\
         dcc.Download(id="download_demixing_results")
