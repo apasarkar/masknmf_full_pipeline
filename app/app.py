@@ -159,15 +159,15 @@ for i, name in enumerate(img_name_list):
 
 block_pmd_1 = html.Div(
     [
-        html.P("Pick height block dimension between 10 and 50"),
-        dbc.Input(type="number", id="block_pmd_1", min=10, max=50, value = pmd_params['block_height'], step=1),
+        html.P("Pick height block dimension between 10 and 50",  style={'textAlign': 'center'}),
+        dbc.Input(type="number", id="block_pmd_1", min=10, max=50, value = pmd_params['block_height'], step=1,  style={'textAlign': 'center'}),
     ],
 )
 
 block_pmd_2 = html.Div(
     [
-        html.P("Pick width block dimension between 10 and 50"),
-        dbc.Input(type="number",id="block_pmd_2", min=10, max=50, value=pmd_params['block_width'], step=1),
+        html.P("Pick width block dimension between 10 and 50",  style={'textAlign': 'center'}),
+        dbc.Input(type="number",id="block_pmd_2", min=10, max=50, value=pmd_params['block_width'], step=1, style={'textAlign': 'center'}),
     ],
 )
 
@@ -254,23 +254,23 @@ SIDEBAR_STYLE = {
 
 sidebar = html.Div(
     [
-        html.H2("Preprocessing"),
+        html.H2("Preprocessing",  style={'textAlign': 'center'}),
         html.Hr(),
         html.H2(
-            "Step 1: Select File"
+            "Step 1: Select File",  style={'textAlign': 'center'}
         ),
         controls,\
         html.Br(),\
         html.Br(),\
-        html.H4("File Selected: None",id="folder-files"),\
-        html.H4("Folder: {}".format(cache['navigated_folder']), id="curr_folder"),\
+        html.H4("File Selected: None",id="folder-files",  style={'textAlign': 'center'}),\
+        html.H4("Folder: {}".format(cache['navigated_folder']), id="curr_folder",  style={'textAlign': 'center'}),\
         html.Br(),\
         html.Br(),\
         html.Br(),\
         html.Br(),\
         html.Br(id='boolean-switch-dumboutput'),\
         html.Hr(),\
-        html.H2("Step 2: Register, Compress, Denoise Data "),\
+        html.H2("Step 2: Register, Compress, Denoise Data ", style={'textAlign': 'center'}),\
         dbc.Row(
             [
                 dbc.Col(
@@ -304,13 +304,14 @@ sidebar = html.Div(
                       labelPosition="top",
                       id='register_flag',
                     ),\
-                    width = 3
+                    # width = 3
                 ),\
                 dbc.Col(
                     dbc.Button(id="button_id", children="Run Job!"),\
-                    width = 9
+                    # width = 9
                 ),\
-            ]
+            ],\
+            justify="evenly",\
         ),\
         
         html.Div(
@@ -326,7 +327,7 @@ sidebar = html.Div(
 
 sidebar_demixing = html.Div(
     [
-        html.H2("Step 3: Demixing. Toggle superpixel correlation threshold and hit RUN"),\
+        html.H2("Step 3: Demixing. Toggle superpixel correlation threshold and hit RUN",  style={'textAlign': 'center'}),\
         html.Div(
                     [
                         html.Div(id='placeholder_demix', children=""),
@@ -370,8 +371,10 @@ sidebar_demixing = html.Div(
                     [
                         dbc.Button(id="button_id_demix", children="Run Job!"),\
                     ],\
-                        width=12),\
-            ]
+                width=12
+                ),\
+            ],\
+            justify="evenly"
         ),\
         html.Br(id='boolean-switch-demix'),\
         dcc.Download(id="download_demixing_results")
