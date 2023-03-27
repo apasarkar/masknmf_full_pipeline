@@ -200,10 +200,14 @@ fig_trace_vis.update_layout(title_text="After running registration + PMD, click 
 pixel_plot = np.zeros((40,40))
 fig_local_corr = px.imshow(pixel_plot)
 fig_local_corr.update_layout(title_text="Noise Variance Image: No Results Yet", title_x=0.5)
+fig_local_corr.update_coloraxes(showscale=False)
+fig_local_corr.update(layout_coloraxis_showscale=False)
 
 pixel_plot = np.zeros((40,40))
 fig_pixel_corr = px.imshow(pixel_plot)
 fig_pixel_corr.update_layout(title_text="Pixelwise Correlation Image: No Results Yet", title_x=0.5)
+fig_pixel_corr.update_coloraxes(showscale=False)
+fig_pixel_corr.update(layout_coloraxis_showscale=False)
 
 
 
@@ -216,6 +220,8 @@ fig_superpixel.update_layout(title_text="Initialization Image: No Results Yet", 
 pixel_plot = np.zeros((40, 40))
 fig_post_demixing_summary_image = px.imshow(pixel_plot)
 fig_post_demixing_summary_image.update_layout(title_text="Source Extraction: No Results Yet", title_x=0.5)
+fig_post_demixing_summary_image.update_coloraxes(showscale=False)
+fig_post_demixing_summary_image.update(layout_coloraxis_showscale=False)
 
 trace = np.zeros((200))
 indices = [i for i in range(1, trace.shape[0]+1)]
@@ -627,6 +633,8 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
             final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
 
             curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
+            curr_fig.update_coloraxes(showscale=False)
+            curr_fig.update(layout_coloraxis_showscale=False)
             curr_fig.update_layout(title_text = "Correlation Image for pixel at height = {}, width = {}".format(y,x),title_x=0.5)
             return curr_fig
         else:
@@ -658,6 +666,8 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
 
             curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
             curr_fig.update_layout(title_text = "Pixel Corr. Image at ( {},{} )".format(y,x),title_x=0.5)
+            curr_fig.update_coloraxes(showscale=False)
+            curr_fig.update(layout_coloraxis_showscale=False)
             return curr_fig
             
         else:
@@ -678,6 +688,9 @@ def compute_local_corr_values_and_init_superpixel_plot(curr_fig, value):
         var_img = cache['noise_var_img']
         curr_fig = px.imshow(var_img.squeeze())
         curr_fig.update_layout(title_text = "Noise Variance Image".format(value),title_x=0.5)
+        
+        curr_fig.update_coloraxes(showscale=False)
+        curr_fig.update(layout_coloraxis_showscale=False)
         
         #Finally pick the init superpixel value
         superpixel_threshold = cache['localnmf_params']['superpixels_corr_thr'][0]
