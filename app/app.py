@@ -33,7 +33,9 @@ import scipy
 import scipy.sparse
 import torch_sparse
 import torch
-import localnmf_functions
+import localnmf 
+from localnmf import superpixel_analysis_ring
+from localnmf.pmd_video import PMDVideo
 from localnmf_functions import get_single_pixel_corr_img
 import math
 import jax
@@ -80,6 +82,7 @@ cache['navigated_file'] = cache['no_file_flag']
 
 cache['PMD_flag'] = False #Indicates whether PMD has been run or not
 cache['demix_flag'] = False #Indicates whether demixing has been run or not 
+cache['PMD_object'] = None
 
 cache['register_run_flag'] = True #This flag will be modified if instead do not want to register the data
 
@@ -128,7 +131,7 @@ localnmf_params = {
         'residual_cut':[0.5, 0.6, 0.6, 0.6],
         'num_plane': 1,
         'patch_size': [100,100],
-        'maxiter': 10,
+        'maxiter': 25,
         'update_after':4, 
         'plot_en': False,
         'skips':0,
@@ -502,11 +505,13 @@ def switch_superpixel_slider_enable(flag):
     
     #In this case, masknmf_flag is ON, so the superpixel slider should be disabled
     if flag: 
-        return True 
+        cache['first_pass_init_method'] = 'masknmf'
+        return True
     #In this case, masknmf_flag is OFF, so the superpixel slider should be enabled
     else:
-        return False
         cache['first_pass_init_method'] = 'superpixel'
+        return False
+        
 
 #######
 ### Post init callback logic
@@ -684,7 +689,7 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
     Input("placeholder_local_corr_plot", "children"),
     prevent_initial_call=True
 )
-def compute_local_corr_values_and_init_superpixel_plot(curr_fig, value):
+def compute_local_corr_values_and_set_superpixel_value(curr_fig, value):
     if cache['PMD_flag']:
         var_img = cache['noise_var_img']
         curr_fig = px.imshow(var_img.squeeze())
@@ -708,14 +713,33 @@ def compute_local_corr_values_and_init_superpixel_plot(curr_fig, value):
     Output("superpixel_plot", "figure"),
     Input("superpixel_plot", "figure"), 
     Input("superpixel_slider", "value"),
+    Input("superpixel_slider", "disabled"),
     prevent_initial_call=True,
 )
-def compute_superpixel_values(curr_fig, value):
+def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
     '''
     TODO: 
     Read parameters in a more principled way -- this boilerplate code is extremely hard to maintain
     '''
-    if cache['PMD_flag']:
+    if disabled_flag:
+        zeros_element = np.zeros((cache['shape'][0], cache['shape'][1]))
+        curr_fig = px.imshow(zeros_element)
+        curr_fig = curr_fig.update_layout(title_text="No superpixels - using maskNMF instead")
+        return curr_fig
+    elif cache['PMD_flag']:
+        
+        ##TODO: Long Term, the PMD object should have a "reset" option...
+        if cache['PMD_object'].a_init is not None: 
+            #If the object has already been initialized, need to clear it
+            ring_radius = 20
+            
+            if torch.cuda.is_available():
+                device='cuda'
+            else:
+                device = 'cpu'
+            cache['PMD_object'] = PMDVideo(cache['U'].tocsr(), cache['R_orig'], cache['s'],\
+                                           cache['V'], ring_radius, cache['shape'], data_order=cache['order'], device=device)
+        
         lnmf_params = cache['localnmf_params']
         
         length_cut=lnmf_params['length_cut'][0] 
@@ -728,31 +752,15 @@ def compute_superpixel_values(curr_fig, value):
         plot_en = True
         text=True
         pseudo_2 = lnmf_params['pseudo_2'][0]
- 
-        #IS THIS OPTIMAL?? 
-        batch_size = 100
+
+
+        cut_off_point = value
+        my_pmd_object = cache['PMD_object']
+        my_pmd_object.initialize_signals_superpixels(num_plane, cut_off_point, residual_cut, length_cut, th, pseudo_2, \
+                                       text =True, plot_en = True)
+        superpixel_image = my_pmd_object.superpixel_image_recent
         
-        if torch.cuda.is_available():
-            device = 'cuda'
-        else:
-            device = 'cpu'
-
-        U_sparse = scipy.sparse.csr_matrix(cache['U'])
-        R = cache['R']
-        V = cache['V']
-        data_shape = cache['shape']
-        (d1,d2,T) = data_shape
-        data_order = cache['order']
-
-        U_sparse = torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
-        V = torch.Tensor(V).to(device)
-        R = torch.Tensor(R).to(device)
-
-
-        U_sparse, R, V, V_PMD = localnmf.superpixel_analysis_ring.PMD_setup_routine(U_sparse, V, R, device) 
-
-        a, mask_a, c, b, output_dictionary, superpixel_image = superpixel_init(U_sparse,R,V, V_PMD, patch_size, num_plane, data_order, (d1,d2,T), value, residual_cut, length_cut, th, batch_size, pseudo_2, device, text = text, plot_en = plot_en, a = None, c = None)
-
+        cache['PMD_object'] = my_pmd_object
         curr_fig = px.imshow(superpixel_image)
         curr_fig.update_layout(title_text = "Superpixels Image, threshold = {}".format(value),title_x=0.5)
         
@@ -1631,6 +1639,14 @@ def register_and_compress_data(n_clicks):
             cache['noise_var_img'] = tiff_loader_obj.std_img
             cache['PMD_flag'] = True
             
+            ##Slowly work in the PMD Video to the app 
+            if torch.cuda.is_available():
+                device='cuda'
+            else:
+                device = 'cpu'
+            ring_radius = 15
+            cache['PMD_object'] = PMDVideo(U.tocsr(), R, s, V, ring_radius, cache['shape'], data_order=order, device=device)
+            
             np.savez(final_path, fov_shape = load_obj.shape[:2], \
                 fov_order=order, U_data = U.data, \
                 U_indices = U.indices,\
@@ -1736,7 +1752,7 @@ def dense_init_pipeline():
         
     block_dims_x = 20 
     block_dims_y = 20 
-    frame_len = 30
+    frame_len = 100
     
     spatial_thresholds_1 = 0.7
     spatial_thresholds_2 = 0.7
@@ -1746,8 +1762,19 @@ def dense_init_pipeline():
 
     a = run_masknmf(cache['save_folder'], confidence, allowed_overlap, cpu_only,\
                 block_dims_x, block_dims_y, frame_len, spatial_thresholds)
+    
+    if torch.cuda.is_available():
+        device='cuda'
+    else:
+        device = 'cpu'
+    cache['PMD_object'] = PMDVideo(cache['U'].tocsr(), cache['R_orig'], cache['s'],\
+                                   cache['V'], ring_radius, cache['shape'], data_order=cache['order'], device=device)
+    
+    my_pmd_object = cache['PMD_object']
+    my_pmd_object.initialize_signals_custom({'a': a})
+    cache['PMD_object'] = my_pmd_object
 
-    return a
+    return my_pmd_object.a
 
     
     
@@ -1875,6 +1902,7 @@ def run_masknmf(data_folder, confidence, allowed_overlap, cpu_only,\
     a_dense = np.asarray(footprints[:, keep_masks].todense())
     # a_dense = np.asarray(footprints.todense())
     a = a_dense.reshape((d1, d2, -1), order=order)
+    
     return a
   
         
@@ -1882,36 +1910,29 @@ def run_masknmf(data_folder, confidence, allowed_overlap, cpu_only,\
     Output("placeholder_demix", "children"), Output("download_demixing_results", "data"), Output("placeholder_post_demixing", "children"),
     inputs=Input("button_id_demix", "n_clicks")
 )
-def demix_data(n_clicks):
+def demix_data_pass1(n_clicks):
     '''
     Contains algorithm for ROI detection via maskNMF/superpixels + localnmf demixing (or running superpixel + demixing)
     '''
     
     if not cache['PMD_flag']:
         return dash.no_update
+    elif cache['PMD_object'] is None:
+        return dash.no_update
+    elif cache['first_pass_init_method'] == 'superpixel' and (cache['PMD_object'].a_init is None or cache['PMD_object'].c_init is None):
+        return dash.no_update
     else:
+        
+        if cache['first_pass_init_method'] == 'masknmf':
+            print("Running masknmf dense init pipeline") 
+            _ = dense_init_pipeline()
+            
+        
         print("results output folder before entering demix data is {}".format(cache['save_folder'])) 
         outdir = cache['save_folder']
         localnmf_params = cache['localnmf_params']
 
-        #This specifies the number of times we run the NMF algorithm on the data. If num_passes = 2 that means we run it once on the PMD data, then subtract the signals and 
-        #re-run on the residual
-        num_passes = localnmf_params['num_passes'] 
-        init = localnmf_params['init']
 
-        if init[0] == 'custom':
-            pass
-            a = dense_init_pipeline()
-        else: 
-            a = None
-                  
-        if a is not None:
-            custom_init = dict()
-            custom_init['a'] = a
-        else:
-            custom_init = None
-
-        cut_off_point=[localnmf_params['superpixels_corr_thr'][i] for i in range(len(localnmf_params['superpixels_corr_thr']))]
         length_cut=localnmf_params['length_cut']
         th=localnmf_params['length_cut']
 
@@ -1923,74 +1944,41 @@ def demix_data(n_clicks):
         max_allow_neuron_size= localnmf_params['max_allow_neuron_size'] #0.15
         merge_corr_thr= localnmf_params['merge_corr_thr']
         merge_overlap_thr= localnmf_params['merge_overlap_thr']
+        
+        ###TODO: This should actually be used here instead of in the constructor for the pmd_object initialization. 
         r =  localnmf_params['r']
         pseudo_2 = localnmf_params['pseudo_2']
 
 
 
         
-        residual_cut = localnmf_params['residual_cut'] #[0.5, 0.6, 0.6, 0.6]
+        residual_cut = localnmf_params['residual_cut']
         num_plane= localnmf_params['num_plane']
-        patch_size= localnmf_params['patch_size'] #[100,100]
-        plot_en = localnmf_params['plot_en'] #True
+        patch_size= localnmf_params['patch_size'] 
+        plot_en = localnmf_params['plot_en'] 
         text= localnmf_params['text']
         maxiter= localnmf_params['maxiter']
-        init=init 
         update_after = localnmf_params['update_after']
-        pseudo_1 = [0, 0, 0, 0]
-        skips= localnmf_params['skips'] #0
-        update_type = "Constant" #Options here are 'Constant' or 'Full'
-        custom_init = custom_init
-        sb = localnmf_params['sb'] #True
-        pseudo_corr = [0, 0, 3/4, 3/4]
+        skips= localnmf_params['skips'] 
         plot_debug = False
         denoise = [False for i in range(maxiter)]
         for k in range(maxiter):
-          if k > 0 and k % 8 == 0:
-            denoise[k] = True
-        batch_size = 100
+            if k > 0 and k % 8 == 0:
+                denoise[k] = True
 
-        if torch.cuda.is_available():
-            device = 'cuda'
-        else:
-            device = 'cpu'
-
-
-
-        U_sparse = scipy.sparse.csr_matrix(cache['U'])
-        R = cache['R']
-        V = cache['V']
-        data_shape = cache['shape']
-        data_order = cache['order']
-
-        U_sparse =  torch_sparse.tensor.from_scipy(U_sparse).float().to(device)
-        V = torch.Tensor(V).to(device)
-        R = torch.Tensor(R).to(device)
-
-        # try:
-        torch.cuda.empty_cache()
-        jax.clear_backends()
-        print("RUNNING DEMIXING")
-
-        rlt = superpixel_analysis_ring.demix_whole_data_robust_ring_lowrank(U_sparse,R,\
-                                V,data_shape, data_order, r, cut_off_point,\
-                                    length_cut, th, num_passes,\
-                                    residual_cut, corr_th_fix,\
-                                      corr_th_fix_sec, corr_th_del, switch_point,\
-                                    max_allow_neuron_size, merge_corr_thr,\
-                                    merge_overlap_thr, num_plane,\
-                                    patch_size, plot_en, text, maxiter,update_after, \
-                                    pseudo_1, pseudo_2, skips, update_type, init=init,\
-                                    custom_init=custom_init,sb=sb, pseudo_corr = pseudo_corr, plot_debug = plot_debug,\
-                                                                    denoise = denoise, device = device, batch_size = batch_size)
-
-        display("Clearing memory from run")
-        torch.cuda.empty_cache()
-        jax.clear_backends()
-
-
-        fin_rlt = rlt['fin_rlt']
-        fin_rlt['datashape'] = cache['shape']
+        
+        my_pmd_object = cache['PMD_object']
+            
+        with torch.no_grad():
+            
+            a, c, b, X, W, res, corr_img_all_r, num_list = superpixel_analysis_ring.update_AC_bg_l2_Y_ring_lowrank(my_pmd_object, maxiter, corr_th_fix, corr_th_fix_sec, corr_th_del, switch_point, skips, merge_corr_thr, merge_overlap_thr, denoise=denoise, plot_en=plot_en, plot_debug=plot_debug, update_after=update_after)
+            W_final = W.create_complete_ring_matrix(a)
+            fin_rlt = {'U_sparse': my_pmd_object.U_sparse.cpu().to_scipy().tocsr(), 'R': my_pmd_object.R.cpu().numpy(), 'V': my_pmd_object.V.cpu().numpy(), 'a':a, 'c':c, 'b':b, "W":W_final, 'res':res, 'corr_img_all_r':corr_img_all_r, 'num_list':num_list, 'data_order': my_pmd_object.data_order, 'data_shape':my_pmd_object.shape};
+            
+        cache['PMD_object'] = my_pmd_object
+            
+        
+        fin_rlt['data_shape'] = cache['shape']
         fin_rlt['data_order'] = cache['order']
 
         save_path = os.path.join(cache['save_folder'], "demixingresults.npz")
@@ -1998,15 +1986,6 @@ def demix_data(n_clicks):
         cache['demixing_results'] = fin_rlt
 
         return dash.no_update, dcc.send_file(save_path), ""
-            # return dash.no_update, dash.no_update, ""
-        # except Exception as e:
-        #     print("\n \n \n")
-        #     display("--------ERROR GENERATED, DETAILS BELOW-----")
-        #     print(e)
-
-
-
-        return dash.no_update
 
 
 
