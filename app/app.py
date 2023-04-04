@@ -728,17 +728,17 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
         return curr_fig
     elif cache['PMD_flag']:
         
-        ##TODO: Long Term, the PMD object should have a "reset" option...
         if cache['PMD_object'].a_init is not None: 
-            #If the object has already been initialized, need to clear it
-            ring_radius = 20
-            
+            print("IN THE KEY LOOP")
             if torch.cuda.is_available():
                 device='cuda'
             else:
                 device = 'cpu'
-            cache['PMD_object'] = PMDVideo(cache['U'].tocsr(), cache['R_orig'], cache['s'],\
-                                           cache['V'], ring_radius, cache['shape'], data_order=cache['order'], device=device)
+            my_pmd_object = cache['PMD_object']
+            my_pmd_object.reset()
+            cache['PMD_object'] = my_pmd_object
+            
+            
         
         lnmf_params = cache['localnmf_params']
         
@@ -1644,8 +1644,7 @@ def register_and_compress_data(n_clicks):
                 device='cuda'
             else:
                 device = 'cpu'
-            ring_radius = 15
-            cache['PMD_object'] = PMDVideo(U.tocsr(), R, s, V, ring_radius, cache['shape'], data_order=order, device=device)
+            cache['PMD_object'] = PMDVideo(U.tocsr(), R, s, V, cache['shape'], data_order=order, device=device)
             
             np.savez(final_path, fov_shape = load_obj.shape[:2], \
                 fov_order=order, U_data = U.data, \
@@ -1767,8 +1766,14 @@ def dense_init_pipeline():
         device='cuda'
     else:
         device = 'cpu'
-    cache['PMD_object'] = PMDVideo(cache['U'].tocsr(), cache['R_orig'], cache['s'],\
-                                   cache['V'], ring_radius, cache['shape'], data_order=cache['order'], device=device)
+    if cache['PMD_object'] is not None:
+        my_pmd_object = cache['PMD_object']
+        my_pmd_object.reset()
+        cache['PMD_object'] = my_pmd_object
+
+    else:
+        cache['PMD_object'] = PMDVideo(cache['U'].tocsr(), cache['R_orig'], cache['s'],\
+                                   cache['V'], cache['shape'], data_order=cache['order'], device=device)
     
     my_pmd_object = cache['PMD_object']
     my_pmd_object.initialize_signals_custom({'a': a})
@@ -1946,7 +1951,7 @@ def demix_data_pass1(n_clicks):
         merge_overlap_thr= localnmf_params['merge_overlap_thr']
         
         ###TODO: This should actually be used here instead of in the constructor for the pmd_object initialization. 
-        r =  localnmf_params['r']
+        ring_radius =  localnmf_params['r']
         pseudo_2 = localnmf_params['pseudo_2']
 
 
@@ -1971,7 +1976,7 @@ def demix_data_pass1(n_clicks):
             
         with torch.no_grad():
             
-            a, c, b, X, W, res, corr_img_all_r, num_list = superpixel_analysis_ring.update_AC_bg_l2_Y_ring_lowrank(my_pmd_object, maxiter, corr_th_fix, corr_th_fix_sec, corr_th_del, switch_point, skips, merge_corr_thr, merge_overlap_thr, denoise=denoise, plot_en=plot_en, plot_debug=plot_debug, update_after=update_after)
+            a, c, b, X, W, res, corr_img_all_r, num_list = superpixel_analysis_ring.update_AC_bg_l2_Y_ring_lowrank(my_pmd_object, maxiter, corr_th_fix, corr_th_fix_sec, corr_th_del, switch_point, skips, merge_corr_thr, merge_overlap_thr, ring_radius, denoise=denoise, plot_en=plot_en, plot_debug=plot_debug, update_after=update_after)
             W_final = W.create_complete_ring_matrix(a)
             fin_rlt = {'U_sparse': my_pmd_object.U_sparse.cpu().to_scipy().tocsr(), 'R': my_pmd_object.R.cpu().numpy(), 'V': my_pmd_object.V.cpu().numpy(), 'a':a, 'c':c, 'b':b, "W":W_final, 'res':res, 'corr_img_all_r':corr_img_all_r, 'num_list':num_list, 'data_order': my_pmd_object.data_order, 'data_shape':my_pmd_object.shape};
             
