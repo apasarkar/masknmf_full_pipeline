@@ -369,7 +369,7 @@ sidebar = html.Div(
 
 sidebar_demixing = html.Div(
     [
-        html.H2("Step 3: Demixing. Toggle superpixel correlation threshold and hit RUN",  style={'textAlign': 'center'}),\
+        html.H2("Step 3: Demixing. Initialize neural signals and hit RUN",  style={'textAlign': 'center'}),\
         html.Div(
                     [
                         html.Div(id='placeholder_demix', children=""),
@@ -411,17 +411,63 @@ sidebar_demixing = html.Div(
             [
                 dbc.Col(
                     [
-                        dbc.Button(id="button_id_demix", children="Run Job!", style={'verticalalign':'center'}),\
+                        dbc.Button(id="button_id_demix", children="Run Demixing", style={'verticalalign':'center'}),\
                     ],\
                     width={"size": 6, "offset": 4},
                 ),\
             ],\
         ),\
+        
+        html.Br(),\
+        html.Br(),\
+        html.Hr(),\
+        
+        html.H2("Step 4: (Optional) Multi-pass demixing for identifying remaining signals. Initialize signals and hit RUN",  style={'textAlign': 'center'}),\
+        html.Div(
+                    [
+                        html.Div(id='placeholder_demix_secondpass', children=""),
+                        
+                    ]
+        ),\
+        dbc.Row(
+            [
+             dbc.Col(
+                [
+                     html.H5('''After running the first pass for demixing, specify a superpixel threshold here to identify any remaining signals''', style={'textAlign':'center'}),\
+                ],\
+                 width = 12
+             ),\
+            ]
+        ),\
+        dbc.Row(
+           [
+               dbc.Col(
+                [ 
+                   dash.dcc.Slider(id='superpixel_slider_secondpass',min=0.00,max=0.999,marks={0:'0', 0.1:'0.1', 0.2:'0.2', 0.3:'0.3', 0.4:'0.4', 0.5:'0.5', 0.6:'0.6',0.7:'0.7', 0.8:'0.8', 0.9:'0.9', 1:'1'},updatemode='mouseup',step=0.01,\
+                                     value=0.0, disabled=True),\
+                    html.H5("Superpixel Threshold", id="Slider Label_secondpass", style={'textAlign': 'center'}),\
+                ],\
+                   width=12
+               ),\
+           ]
+        ),\
+        dbc.Row(
+            [
+                dbc.Col(
+                    [
+                        dbc.Button(id="button_id_demix_secondpass", children="Run Demixing", style={'verticalalign':'center'}),\
+                    ],\
+                    width={"size": 6, "offset": 4},
+                ),\
+            ],\
+        ),\
+
         html.Br(id='boolean-switch-demix'),\
         dcc.Download(id="download_demixing_results")
     ],
     style=SIDEBAR_STYLE,
 )
+
 
 
 app.layout = html.Div(
