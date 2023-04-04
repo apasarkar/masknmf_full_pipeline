@@ -513,15 +513,25 @@ app.layout = html.Div(
                         id='local_correlation_plot',
                         figure=fig_local_corr
                     ),\
+                    dcc.Graph(
+                        id='local_correlation_plot_secondpass',
+                        figure=fig_local_corr_secondpass
+                    ),\
                     html.Div(id='placeholder_local_corr_plot', children=""),\
                 ],\
                 width=3
             ),\
             dbc.Col(
-                 dcc.Graph(
-                        id='local_pixel_corr_plot',
-                        figure=fig_pixel_corr
+                [
+                    dcc.Graph(
+                            id='local_pixel_corr_plot',
+                            figure=fig_pixel_corr
                     ),\
+                    dcc.Graph(
+                            id='local_pixel_corr_plot_secondpass',
+                            figure=fig_pixel_corr_secondpass
+                    ),\
+                ],\
                 width=3
             ),\
             
@@ -530,6 +540,11 @@ app.layout = html.Div(
                     dcc.Graph(
                         id='superpixel_plot',
                         figure=fig_superpixel
+                    ),\
+                    
+                    dcc.Graph(
+                        id='superpixel_plot_secondpass',
+                        figure=fig_superpixel_secondpass
                     ),\
                 ],\
                 width=3
