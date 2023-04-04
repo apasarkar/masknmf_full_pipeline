@@ -197,30 +197,61 @@ fig_trace_vis.update_layout(title_text="After running registration + PMD, click 
 
 
 #####
-## This is for the superpixel display
+## This is for the first pass initialization display
 #####
-
-pixel_plot = np.zeros((40,40))
+default_figsize = (40, 40)
+cache['default_figsize'] = default_figsize
+pixel_plot = np.zeros(default_figsize)
 fig_local_corr = px.imshow(pixel_plot)
 fig_local_corr.update_layout(title_text="Noise Variance Image: No Results Yet", title_x=0.5)
 fig_local_corr.update_coloraxes(showscale=False)
 fig_local_corr.update(layout_coloraxis_showscale=False)
 
-pixel_plot = np.zeros((40,40))
+pixel_plot = np.zeros(default_figsize)
 fig_pixel_corr = px.imshow(pixel_plot)
-fig_pixel_corr.update_layout(title_text="Pixelwise Correlation Image: No Results Yet", title_x=0.5)
+fig_pixel_corr.update_layout(title_text="Pixelwise Corr. Image: No Results Yet", title_x=0.5)
 fig_pixel_corr.update_coloraxes(showscale=False)
 fig_pixel_corr.update(layout_coloraxis_showscale=False)
+fig_pixel_corr.update_yaxes(showticklabels=False)
 
 
 
 
-pixel_plot = np.zeros((40,40))
+pixel_plot = np.zeros(default_figsize)
 fig_superpixel = px.imshow(pixel_plot)
 fig_superpixel.update_layout(title_text="Initialization Image: No Results Yet", title_x=0.5)
 
 
-pixel_plot = np.zeros((40, 40))
+
+#####
+## This is for the second pass superpixel display 
+#####
+
+
+pixel_plot = np.zeros(default_figsize)
+fig_local_corr_secondpass = px.imshow(pixel_plot)
+fig_local_corr_secondpass.update_layout(title_text="Residual Corr. Image: No Results Yet", title_x=0.5)
+fig_local_corr_secondpass.update_coloraxes(showscale=False)
+fig_local_corr_secondpass.update(layout_coloraxis_showscale=False)
+
+pixel_plot = np.zeros(default_figsize)
+fig_pixel_corr_secondpass = px.imshow(pixel_plot)
+fig_pixel_corr_secondpass.update_layout(title_text="Pixelwise Corr. Image: No Results Yet", title_x=0.5)
+fig_pixel_corr_secondpass.update_coloraxes(showscale=False)
+fig_pixel_corr_secondpass.update(layout_coloraxis_showscale=False)
+
+
+
+
+pixel_plot = np.zeros(default_figsize)
+fig_superpixel_secondpass = px.imshow(pixel_plot)
+fig_superpixel_secondpass.update_layout(title_text="Superpixel Image: No Results Yet", title_x=0.5)
+
+######
+## This is for visualizing the demixing outputs
+######
+
+pixel_plot = np.zeros(default_figsize)
 fig_post_demixing_summary_image = px.imshow(pixel_plot)
 fig_post_demixing_summary_image.update_layout(title_text="Source Extraction: No Results Yet", title_x=0.5)
 fig_post_demixing_summary_image.update_coloraxes(showscale=False)
@@ -722,8 +753,13 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
     Read parameters in a more principled way -- this boilerplate code is extremely hard to maintain
     '''
     if disabled_flag:
-        zeros_element = np.zeros((cache['shape'][0], cache['shape'][1]))
-        curr_fig = px.imshow(zeros_element)
+        if cache['PMD_flag']:
+            zeros_element = np.zeros((cache['shape'][0], cache['shape'][1]))
+            curr_fig = px.imshow(zeros_element)
+        else:
+            zeros_element = np.zeros(default_figsize)
+            curr_fig = px.imshow(zeros_element)
+        
         curr_fig = curr_fig.update_layout(title_text="No superpixels - using maskNMF instead")
         return curr_fig
     elif cache['PMD_flag']:
@@ -930,7 +966,7 @@ def change_register_flag(new_mode):
     
     return dash.no_update
 
-None, 0, dash.no_update, " ", cache['shape'][2] 
+
 @dash.callback(
     Output("placeholder", "children"), Output("pmd_mc_slider", "value"), Output("download_elt", "data"), Output("placeholder_local_corr_plot", "children"), Output("pmd_mc_slider", "max"),
     inputs=Input("button_id", "n_clicks"),
