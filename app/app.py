@@ -705,12 +705,16 @@ def plot_demixing_result(clickData):
 
 @app.callback(
     Output("local_pixel_corr_plot", "figure"),
-    Input("local_pixel_corr_plot", "figure"),
     Input("local_correlation_plot", "clickData"),
     Input("local_correlation_plot", "figure"),
     prevent_initial_call=True
 )
-def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
+def update_single_pixel_corr_plot(clickData, local_corr_fig):
+    #compute_single_pixel_correlation_image(row_index):
+    if cache['PMD_object'] is None:
+        return dash.no_update
+    
+    my_pmd_object = cache['PMD_object']
     button_clicked = list(ctx.triggered_prop_ids.keys())[0]
     
     if button_clicked == "local_correlation_plot.clickData":
@@ -721,17 +725,14 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
             else:
                 device = 'cpu'
 
-            temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
-            temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+            temp_mat = np.arange(my_pmd_object.shape[0] * my_pmd_object.shape[1])
+            temp_mat = temp_mat.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
             desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
-            U_sparse = torch_sparse.tensor.from_scipy(scipy.sparse.csr_matrix(cache['U'])).to(device)
-            V = torch.Tensor(cache['V']).to(device)
-            R = torch.Tensor(cache['R']).to(device)
 
-            final_image = get_single_pixel_corr_img(U_sparse, R, V, desired_index).cpu().numpy()
-            final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+            final_image = my_pmd_object.compute_single_pixel_correlation_image(desired_index, residual=False).cpu().numpy()
+            final_image = final_image.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
 
-            curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
+            curr_fig = px.imshow(final_image, zmin=0, zmax=1)
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
             curr_fig.update_layout(title_text = "Correlation Image for pixel at height = {}, width = {}".format(y,x),title_x=0.5)
@@ -753,20 +754,17 @@ def update_single_pixel_corr_plot(curr_fig, clickData, local_corr_fig):
             x,y = np.unravel_index(my_img.argmax(), my_img.shape)
 
             #Step 3: Calculate the single pixel corr of this "brightest" value
-            temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
-            temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+            temp_mat = np.arange(my_pmd_object.shape[0] * my_pmd_object.shape[1])
+            temp_mat = temp_mat.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
             desired_index = temp_mat[x, y] ##Note y, x not x,y because the clickback returns the height as the second coordinate
-            U_sparse = torch_sparse.tensor.from_scipy(scipy.sparse.csr_matrix(cache['U'])).to(device)
-            V = torch.Tensor(cache['V']).to(device)
-            R = torch.Tensor(cache['R']).to(device)
 
-            final_image = get_single_pixel_corr_img(U_sparse, R, V, desired_index).cpu().numpy()
-            final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+            final_image = my_pmd_object.compute_single_pixel_correlation_image(desired_index, residual=False).cpu().numpy()
+            final_image = final_image.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
 
-            curr_fig = px.imshow(final_image.squeeze(), zmin=0, zmax=1)
-            curr_fig.update_layout(title_text = "Pixel Corr. Image at ( {},{} )".format(y,x),title_x=0.5)
+            curr_fig = px.imshow(final_image, zmin=0, zmax=1)
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
+            curr_fig.update_layout(title_text = "Correlation Image for pixel at height = {}, width = {}".format(y,x),title_x=0.5)
             return curr_fig
             
         else:
@@ -2143,7 +2141,7 @@ def update_residual_singlepixel_corr_plot(clickData, local_corr_fig):
             temp_mat = temp_mat.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
             desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
 
-            final_image = my_pmd_object.compute_single_pixel_correlation_image(desired_index).cpu().numpy()
+            final_image = my_pmd_object.compute_single_pixel_correlation_image(desired_index, residual=True).cpu().numpy()
             final_image = final_image.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
 
             curr_fig = px.imshow(final_image, zmin=0, zmax=1)
@@ -2172,7 +2170,7 @@ def update_residual_singlepixel_corr_plot(clickData, local_corr_fig):
             desired_index = temp_mat[x, y] ##Note y, x not x,y because the clickback returns the height as the second coordinate
 
 
-            final_image = my_pmd_object.compute_single_pixel_correlation_image(desired_index).cpu().numpy()
+            final_image = my_pmd_object.compute_single_pixel_correlation_image(desired_index, residual=True).cpu().numpy()
             final_image = final_image.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
 
             curr_fig = px.imshow(final_image, zmin=0, zmax=1)
