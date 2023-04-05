@@ -445,7 +445,7 @@ sidebar_demixing = html.Div(
                dbc.Col(
                 [ 
                    dash.dcc.Slider(id='superpixel_slider_secondpass',min=0.00,max=0.999,marks={0:'0', 0.1:'0.1', 0.2:'0.2', 0.3:'0.3', 0.4:'0.4', 0.5:'0.5', 0.6:'0.6',0.7:'0.7', 0.8:'0.8', 0.9:'0.9', 1:'1'},updatemode='mouseup',step=0.01,\
-                                     value=0.0, disabled=True),\
+                                     value=0.9),\
                     html.H5("Superpixel Threshold", id="Slider Label_secondpass", style={'textAlign': 'center'}),\
                 ],\
                    width=12
@@ -2010,10 +2010,10 @@ def run_masknmf(data_folder, confidence, allowed_overlap, cpu_only,\
   
         
 @dash.callback(
-    Output("secondpass_init", "children"), Output("placeholder_demix", "children"), Output("download_demixing_results", "data"), Output("placeholder_post_demixing", "children"),
-    inputs=Input("button_id_demix", "n_clicks")
+    Output("secondpass_init", "children"), Output("placeholder_demix", "children"), Output("download_demixing_results", "data"), Output("placeholder_post_demixing", "children"), Input("button_id_demix", "n_clicks"), Input("button_id_demix_secondpass", "n_clicks"),
+    prevent_initial_call=True
 )
-def demix_data_pass1(n_clicks):
+def demix_data(n_clicks, n_clickssecondpass):
     '''
     Contains algorithm for ROI detection via maskNMF/superpixels + localnmf demixing (or running superpixel + demixing)
     '''
@@ -2026,9 +2026,15 @@ def demix_data_pass1(n_clicks):
         return dash.no_update
     else:
         
-        if cache['first_pass_init_method'] == 'masknmf':
-            print("Running masknmf dense init pipeline") 
-            _ = dense_init_pipeline()
+        button_clicked = list(ctx.triggered_prop_ids.keys())[0]
+        if button_clicked == "button_id_demix.n_clicks":
+            print("FIRST DEMIX LOOP")
+
+            if cache['first_pass_init_method'] == 'masknmf':
+                print("Running masknmf dense init pipeline") 
+                _ = dense_init_pipeline()
+        else:
+            print("SECOND DEMIX LOOP")
             
         
         print("results output folder before entering demix data is {}".format(cache['save_folder'])) 
@@ -2088,7 +2094,10 @@ def demix_data_pass1(n_clicks):
         np.savez(save_path, final_results = fin_rlt)
         cache['demixing_results'] = fin_rlt
 
-        return " ", dash.no_update, dcc.send_file(save_path), ""
+        if button_clicked == "button_id_demix.n_clicks":
+            return " ", dash.no_update, dcc.send_file(save_path), ""
+        else:
+            return dash.no_update, dash.no_update, dcc.send_file(save_path), ""
 
 
 ######
@@ -2179,9 +2188,58 @@ def update_residual_singlepixel_corr_plot(clickData, local_corr_fig):
             curr_fig.update(layout_coloraxis_showscale=False)
             return curr_fig
 
-    
+        
+@app.callback(
+    Output("superpixel_plot_secondpass", "figure"),
+    Input("superpixel_slider_secondpass", "value"),
+    Input("local_correlation_plot_secondpass", "figure"),
+    prevent_initial_call=True,
+)
+def generate_superpixel_plot_secondpass(value, fig):
+    if cache['PMD_object'] is None or cache['PMD_object'].a is None or cache['PMD_object'].c is None:
+        return dash.no_update
+    else:
+        my_pmd_object = cache['PMD_object']
+        if torch.cuda.is_available():
+            device='cuda'
+        else:
+            device = 'cpu'
+        my_pmd_object = cache['PMD_object']
+            
+        lnmf_params = cache['localnmf_params']
+        
+        length_cut=lnmf_params['length_cut'][1] 
+        th= lnmf_params['th'][1] 
+
+        ##Do not need to modify
+        residual_cut = lnmf_params['residual_cut'][1]
+        num_plane=lnmf_params['num_plane']
+        patch_size= lnmf_params['patch_size']
+        plot_en = True
+        text=True
+        pseudo_2 = lnmf_params['pseudo_2'][1]
 
 
+        cut_off_point = value
+        my_pmd_object = cache['PMD_object']
+        my_pmd_object.initialize_signals_superpixels(num_plane, cut_off_point, residual_cut, length_cut, th, pseudo_2, \
+                                       text =True, plot_en = True)
+        superpixel_image = my_pmd_object.superpixel_image_recent
+        
+        cache['PMD_object'] = my_pmd_object
+        curr_fig = px.imshow(superpixel_image)
+        curr_fig.update_layout(title_text = "Superpixels Image, threshold = {}".format(value),title_x=0.5)
+        
+        ##Update the value
+        lnmf_params = cache['localnmf_params']
+        lnmf_params['superpixels_corr_thr'][1] = value
+        cache['localnmf_params'] = lnmf_params
+        return curr_fig
+            
+        
+            
+        
+        
 if __name__ == '__main__':
     port_number = 8900
     app.run_server(host='0.0.0.0',debug=True, port=port_number)
