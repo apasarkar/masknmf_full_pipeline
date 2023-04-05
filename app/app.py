@@ -665,39 +665,47 @@ def generate_post_demixing_results(children):
     prevent_initial_call=True
 )
 def plot_demixing_result(clickData):
-    if cache['PMD_flag'] and cache['demixing_results'] is not None:
-        print("the clickdata is {}".format(clickData))
+    if cache['PMD_object'] is not None:
+        my_pmd_object = cache['PMD_object']
+        if my_pmd_object.a is not None and my_pmd_object.c is not None: 
+            a = scipy.sparse.csr_matrix(my_pmd_object.a)
+            c = my_pmd_object.c
+            x, y = get_points(clickData)
+            if y >= cache['shape'][0] or x >= cache['shape'][1]: 
+                raise ValueError("the click was out of bounds")
+            temp_mat = np.arange(my_pmd_object.shape[0] * my_pmd_object.shape[1])
+            temp_mat = temp_mat.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
+            desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+        
+            
+            background_row = my_pmd_object.get_background_row(desired_index).cpu().numpy().flatten() + my_pmd_object.b[desired_index, :].flatten()
+            
+            ##Get the PMD Row
+            desired_row = my_pmd_object.get_PMD_row(desired_index).cpu().numpy().flatten()
 
-        fin_rlt = cache['demixing_results']
-        a = scipy.sparse.csr_matrix(fin_rlt['a'])
-        c = fin_rlt['c']
-        
-        x, y = get_points(clickData)
-        if y >= cache['shape'][0] or x >= cache['shape'][1]: 
-            print("the click was out of bounds")
-        temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
-        temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
-        desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
-        
-        desired_row = (cache['U'].getrow(desired_index).dot(cache['R'])).dot(cache['V']).flatten()
-        AC_trace = a.getrow(desired_index).dot(c.T)
-        
-        input_dict = {"Timesteps": [i for i in range(1, len(desired_row) + 1)], "PMD": desired_row.flatten(), "Signal": AC_trace.flatten()}
-        trace_df = pd.DataFrame.from_dict(input_dict)
-        
-        fig_trace_vis = px.line(trace_df, x='Timesteps', y=trace_df.columns[1:], 
-            color_discrete_map={
-                 "PMD": "#353739",
-                 # "Signal": "#fa8d22"
-             })
-        fig_trace_vis.update_layout(title_text="Demixing at pixel height = {} width = {}".format(y, x), title_x=0.5)
-        
-        return fig_trace_vis
-        
-        
+            ##Get the AC Row
+            AC_trace = a.getrow(desired_index).dot(c.T)
+            AC_trace = AC_trace.flatten()
+
+            
+            
+            input_dict = {"Timesteps": [i for i in range(1, len(desired_row) + 1)], "PMD": desired_row, "Signal": AC_trace, "Background": background_row}
+            trace_df = pd.DataFrame.from_dict(input_dict)
+
+            fig_trace_vis = px.line(trace_df, x='Timesteps', y=trace_df.columns[1:], 
+                color_discrete_map={
+                     "PMD": "#353739",
+                     # "Signal": "#fa8d22"
+                 })
+            fig_trace_vis.update_layout(title_text="Demixing at pixel height = {} width = {}".format(y, x), title_x=0.5)
+
+            return fig_trace_vis
+            
+            
+        else:
+            return dash.no_update
     else:
         return dash.no_update
-    
     
     
     
