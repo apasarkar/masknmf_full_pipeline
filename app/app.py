@@ -21,7 +21,6 @@ import sys
 
 import localnmf
 from localnmf.superpixel_analysis_ring import superpixel_init
-from localnmf.superpixel_analysis_ring import local_correlation_mat
 import scipy
 import scipy.sparse
 import torch_sparse
@@ -36,6 +35,7 @@ import torch
 import localnmf 
 from localnmf import superpixel_analysis_ring
 from localnmf.pmd_video import PMDVideo
+from localnmf.pmd_video import local_correlation_mat
 from localnmf_functions import get_single_pixel_corr_img
 import math
 import jax
@@ -69,6 +69,7 @@ def list_dir(path):
 # load_figure_template('LUX')
 stylesheets = [dbc.themes.LUX]
 app = Dash(__name__, background_callback_manager=background_callback_manager, external_stylesheets=stylesheets)
+
 
 ##Globally used data structures/info
 '''
@@ -425,7 +426,7 @@ sidebar_demixing = html.Div(
         html.H2("Step 4: (Optional) Multi-pass demixing for identifying remaining signals. Initialize signals and hit RUN",  style={'textAlign': 'center'}),\
         html.Div(
                     [
-                        html.Div(id='placeholder_demix_secondpass', children=""),
+                        html.Div(id='secondpass_init', children=""),
                         
                     ]
         ),\
@@ -2009,7 +2010,7 @@ def run_masknmf(data_folder, confidence, allowed_overlap, cpu_only,\
   
         
 @dash.callback(
-    Output("placeholder_demix", "children"), Output("download_demixing_results", "data"), Output("placeholder_post_demixing", "children"),
+    Output("secondpass_init", "children"), Output("placeholder_demix", "children"), Output("download_demixing_results", "data"), Output("placeholder_post_demixing", "children"),
     inputs=Input("button_id_demix", "n_clicks")
 )
 def demix_data_pass1(n_clicks):
@@ -2087,11 +2088,32 @@ def demix_data_pass1(n_clicks):
         np.savez(save_path, final_results = fin_rlt)
         cache['demixing_results'] = fin_rlt
 
-        return dash.no_update, dcc.send_file(save_path), ""
+        return " ", dash.no_update, dcc.send_file(save_path), ""
 
 
+######
+## Second pass plotting functionality
+######
 
-
+@app.callback(
+    Output("local_correlation_plot_secondpass", "figure"), 
+    Input("secondpass_init", "children"),
+    prevent_initial_call=True
+)
+def get_residual_corr_img(value):
+    if cache['PMD_object'] is not None:
+        my_pmd_object = cache['PMD_object']
+        if my_pmd_object.a is not None and my_pmd_object.c is not None:
+            output = my_pmd_object.compute_local_correlation_image(0).reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), \
+                                                                      order=my_pmd_object.data_order)
+            my_fig = px.imshow(output)
+            my_fig.update_coloraxes(showscale=False)
+            my_fig.update_layout(title_text="Residual Corr. Image", title_x=0.5)
+            return my_fig
+        else:
+            return dash.no_update
+    else:
+        return dash.no_update
 
 if __name__ == '__main__':
     port_number = 8900
