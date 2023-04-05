@@ -854,6 +854,8 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
 
         cut_off_point = value
         my_pmd_object = cache['PMD_object']
+        if my_pmd_object.a is not None or my_pmd_object.c is not None: 
+            my_pmd_object.reset()
         my_pmd_object.initialize_signals_superpixels(num_plane, cut_off_point, residual_cut, length_cut, th, pseudo_2, \
                                        text =True, plot_en = True)
         superpixel_image = my_pmd_object.superpixel_image_recent
