@@ -2114,6 +2114,81 @@ def get_residual_corr_img(value):
             return dash.no_update
     else:
         return dash.no_update
+    
+@app.callback(
+    Output("local_pixel_corr_plot_secondpass", "figure"),
+    Input("local_correlation_plot_secondpass", "clickData"),
+    Input("local_correlation_plot_secondpass", "figure"),
+    prevent_initial_call=True
+)
+def update_residual_singlepixel_corr_plot(clickData, local_corr_fig):
+    
+    if cache['PMD_object'] is None:
+        return dash.no_update
+    elif cache['PMD_object'].a is None or cache['PMD_object'].c is None:
+        return dash.no_update
+    else:
+        button_clicked = list(ctx.triggered_prop_ids.keys())[0]
+        my_pmd_object = cache['PMD_object']
+        if button_clicked == "local_correlation_plot_secondpass.clickData":
+            x, y = get_points(clickData)
+            if torch.cuda.is_available():
+                device = 'cuda'
+            else:
+                device = 'cpu'
+
+            temp_mat = np.arange(my_pmd_object.shape[0] * my_pmd_object.shape[1])
+            temp_mat = temp_mat.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
+            desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+            
+#             U_sparse = torch_sparse.tensor.from_scipy(scipy.sparse.csr_matrix(cache['U'])).to(device)
+#             V = torch.Tensor(cache['V']).to(device)
+#             R = torch.Tensor(cache['R']).to(device)
+
+#             final_image = get_single_pixel_corr_img(U_sparse, R, V, desired_index).cpu().numpy()
+#             final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+
+            final_image = np.random.rand(my_pmd_object.shape[0], my_pmd_object.shape[1])
+            curr_fig = px.imshow(final_image, zmin=0, zmax=1)
+            curr_fig.update_coloraxes(showscale=False)
+            curr_fig.update(layout_coloraxis_showscale=False)
+            curr_fig.update_layout(title_text = "Corr. Image for pixel at height = {}, width = {}".format(y,x),title_x=0.5)
+            return curr_fig
+
+        elif button_clicked== "local_correlation_plot_secondpass.figure":        
+
+            if torch.cuda.is_available():
+                device = 'cuda'
+            else:
+                device = 'cpu'
+
+            #Step 1: Get the local correlation figure
+            my_img = np.array(local_corr_fig['data'][0]['z'])
+
+            #Step 2: Get the indices of the "brightest" value
+            x,y = np.unravel_index(my_img.argmax(), my_img.shape)
+
+            
+#             #Step 3: Calculate the single pixel corr of this "brightest" value
+#             temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
+#             temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+#             desired_index = temp_mat[x, y] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+#             U_sparse = torch_sparse.tensor.from_scipy(scipy.sparse.csr_matrix(cache['U'])).to(device)
+#             V = torch.Tensor(cache['V']).to(device)
+#             R = torch.Tensor(cache['R']).to(device)
+
+#             final_image = get_single_pixel_corr_img(U_sparse, R, V, desired_index).cpu().numpy()
+#             final_image = final_image.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+
+            final_image = np.random.rand(my_pmd_object.shape[0], my_pmd_object.shape[1])
+            curr_fig = px.imshow(final_image, zmin=0, zmax=1)
+            curr_fig.update_layout(title_text = "Pixel Corr. Image at ( {},{} )".format(y,x),title_x=0.5)
+            curr_fig.update_coloraxes(showscale=False)
+            curr_fig.update(layout_coloraxis_showscale=False)
+            return curr_fig
+
+    
+
 
 if __name__ == '__main__':
     port_number = 8900
