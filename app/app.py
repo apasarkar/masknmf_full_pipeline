@@ -515,8 +515,6 @@ sidebar_results =  html.Div(
 
 
 
-
-
 app.layout = html.Div(
     # [html.H1("File Selected: None"), html.Div(controls), html.Div(id="folder-files")]
     [dbc.Row(
@@ -629,7 +627,8 @@ app.layout = html.Div(
                 ],\
                 width=6
             ),\
-        ]
+        ],\
+    align="center"
     ),\
     ]
 )
@@ -886,11 +885,9 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
         curr_fig.update_yaxes(showticklabels=False)
         return curr_fig
     elif cache['PMD_object'] is not None:
-        
-        if cache['PMD_object'].a_init is not None: 
-            my_pmd_object = cache['PMD_object']
+        my_pmd_object = cache['PMD_object']
+        if my_pmd_object.a_init is not None: 
             my_pmd_object.reset()
-            cache['PMD_object'] = my_pmd_object
             
         if my_pmd_object.a is not None or my_pmd_object.c is not None: 
             my_pmd_object.reset()
@@ -911,7 +908,6 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
 
 
         cut_off_point = value
-        my_pmd_object = cache['PMD_object']
         
         my_pmd_object.initialize_signals_superpixels(num_plane, cut_off_point, residual_cut, length_cut, th, pseudo_2, \
                                        text =True, plot_en = True)
