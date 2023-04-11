@@ -221,6 +221,7 @@ fig_pixel_corr.update_yaxes(showticklabels=False)
 pixel_plot = np.zeros(default_figsize)
 fig_superpixel = px.imshow(pixel_plot)
 fig_superpixel.update_layout(title_text="Initialization Image: No Results Yet", title_x=0.5)
+fig_superpixel.update_yaxes(showticklabels=False)
 
 
 
@@ -240,6 +241,8 @@ fig_pixel_corr_secondpass = px.imshow(pixel_plot)
 fig_pixel_corr_secondpass.update_layout(title_text="Pixelwise Corr. Image: No Results Yet", title_x=0.5)
 fig_pixel_corr_secondpass.update_coloraxes(showscale=False)
 fig_pixel_corr_secondpass.update(layout_coloraxis_showscale=False)
+fig_pixel_corr_secondpass.update_yaxes(showticklabels=False)
+
 
 
 
@@ -247,6 +250,7 @@ fig_pixel_corr_secondpass.update(layout_coloraxis_showscale=False)
 pixel_plot = np.zeros(default_figsize)
 fig_superpixel_secondpass = px.imshow(pixel_plot)
 fig_superpixel_secondpass.update_layout(title_text="Superpixel Image: No Results Yet", title_x=0.5)
+fig_superpixel_secondpass.update_yaxes(showticklabels=False)
 
 ######
 ## This is for visualizing the demixing outputs
@@ -743,7 +747,8 @@ def update_single_pixel_corr_plot(clickData, local_corr_fig):
             curr_fig = px.imshow(final_image, zmin=0, zmax=1)
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
-            curr_fig.update_layout(title_text = "Correlation Image for pixel at height = {}, width = {}".format(y,x),title_x=0.5)
+            curr_fig.update_yaxes(showticklabels=False)
+            curr_fig.update_layout(title_text = "Pixel Corr. Image at ({}, {})".format(y,x),title_x=0.5)
             return curr_fig
         else:
             return dash.no_update
@@ -772,7 +777,8 @@ def update_single_pixel_corr_plot(clickData, local_corr_fig):
             curr_fig = px.imshow(final_image, zmin=0, zmax=1)
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
-            curr_fig.update_layout(title_text = "Correlation Image for pixel at height = {}, width = {}".format(y,x),title_x=0.5)
+            curr_fig.update_yaxes(showticklabels=False)
+            curr_fig.update_layout(title_text = "Corr. Image for pixel at ({},{})".format(y,x),title_x=0.5)
             return curr_fig
             
         else:
@@ -829,6 +835,7 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
             curr_fig = px.imshow(zeros_element)
         
         curr_fig = curr_fig.update_layout(title_text="No superpixels - using maskNMF instead")
+        curr_fig.update_yaxes(showticklabels=False)
         return curr_fig
     elif cache['PMD_flag']:
         
@@ -868,6 +875,7 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
         
         cache['PMD_object'] = my_pmd_object
         curr_fig = px.imshow(superpixel_image)
+        curr_fig.update_yaxes(showticklabels=False)
         curr_fig.update_layout(title_text = "Superpixels Image, threshold = {}".format(value),title_x=0.5)
         
         ##Update the value
@@ -1795,7 +1803,6 @@ def register_and_compress_data(n_clicks):
     jax.clear_backends() 
 
     downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
-    # return None, 0, dcc.send_file(downloaded_data_file), " "
     return None, 0, dash.no_update, " ", cache['shape'][2] 
 
         
@@ -2125,6 +2132,7 @@ def get_residual_corr_img(value):
                                                                       order=my_pmd_object.data_order)
             my_fig = px.imshow(output)
             my_fig.update_coloraxes(showscale=False)
+            my_fig.update_yaxes(showticklabels=False)
             my_fig.update_layout(title_text="Residual Corr. Image", title_x=0.5)
             return my_fig
         else:
@@ -2164,7 +2172,8 @@ def update_residual_singlepixel_corr_plot(clickData, local_corr_fig):
             curr_fig = px.imshow(final_image, zmin=0, zmax=1)
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
-            curr_fig.update_layout(title_text = "Pixel Corr. Image at height = {}, width = {}".format(y,x),title_x=0.5)
+            curr_fig.update_yaxes(showticklabels=False)
+            curr_fig.update_layout(title_text = "Residual Pixel Corr. Image at height = {}, width = {}".format(y,x),title_x=0.5)
             return curr_fig
 
         elif button_clicked== "local_correlation_plot_secondpass.figure":        
@@ -2191,6 +2200,7 @@ def update_residual_singlepixel_corr_plot(clickData, local_corr_fig):
             final_image = final_image.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
 
             curr_fig = px.imshow(final_image, zmin=0, zmax=1)
+            curr_fig.update_yaxes(showticklabels=False)
             curr_fig.update_layout(title_text = "Pixel Corr. Image at ( {},{} )".format(y,x),title_x=0.5)
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
@@ -2236,6 +2246,7 @@ def generate_superpixel_plot_secondpass(value, fig):
         
         cache['PMD_object'] = my_pmd_object
         curr_fig = px.imshow(superpixel_image)
+        curr_fig.update_yaxes(showticklabels=False)
         curr_fig.update_layout(title_text = "Superpixels Image, threshold = {}".format(value),title_x=0.5)
         
         ##Update the value
