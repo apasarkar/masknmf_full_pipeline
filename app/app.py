@@ -475,6 +475,48 @@ sidebar_demixing = html.Div(
 
 
 
+
+#####
+## Sidebar for results
+######
+
+sidebar_results =  html.Div(
+    [
+        html.H2("Download Results",  style={'textAlign': 'center'}),\
+        dbc.Row(
+            [
+                dbc.Col(
+                    [
+                        dbc.Button(id="download_result_final", children="Download Demixing Results"),\
+                    ],\
+                    width=6,\
+                ),\
+                dbc.Col(
+                    [
+                        dbc.Button(id="download_demixing_video", children="Download Short Demixing Video"),\
+                    ],\
+                    width=6,\
+                ),\
+                
+            ]
+        ),\
+        html.Br(),\
+        html.Br(),\
+        html.H5("To the right of this bar, you can visualize the demixing results at single-pixel precision",  style={'textAlign': 'center'}),\
+
+
+    ],
+    style=SIDEBAR_STYLE,
+)
+
+#####
+## App Layout
+#####
+
+
+
+
+
 app.layout = html.Div(
     # [html.H1("File Selected: None"), html.Div(controls), html.Div(id="folder-files")]
     [dbc.Row(
@@ -563,6 +605,12 @@ app.layout = html.Div(
         [
             dbc.Col(
                 [
+                    html.Div([sidebar_results]),\
+                ],\
+                width=3
+            ),\
+            dbc.Col(
+                [
                     dcc.Graph(
                         id='post_demixing_summary_image',
                         figure=fig_post_demixing_summary_image
@@ -579,7 +627,7 @@ app.layout = html.Div(
                         figure=fig_post_demixing_pixewise_traces
                     ),\
                 ],\
-                width=9
+                width=6
             ),\
         ]
     ),\
@@ -837,18 +885,15 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
         curr_fig = curr_fig.update_layout(title_text="No superpixels - using maskNMF instead")
         curr_fig.update_yaxes(showticklabels=False)
         return curr_fig
-    elif cache['PMD_flag']:
+    elif cache['PMD_object'] is not None:
         
         if cache['PMD_object'].a_init is not None: 
-            print("IN THE KEY LOOP")
-            if torch.cuda.is_available():
-                device='cuda'
-            else:
-                device = 'cpu'
             my_pmd_object = cache['PMD_object']
             my_pmd_object.reset()
             cache['PMD_object'] = my_pmd_object
             
+        if my_pmd_object.a is not None or my_pmd_object.c is not None: 
+            my_pmd_object.reset()
             
         
         lnmf_params = cache['localnmf_params']
@@ -867,8 +912,7 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
 
         cut_off_point = value
         my_pmd_object = cache['PMD_object']
-        if my_pmd_object.a is not None or my_pmd_object.c is not None: 
-            my_pmd_object.reset()
+        
         my_pmd_object.initialize_signals_superpixels(num_plane, cut_off_point, residual_cut, length_cut, th, pseudo_2, \
                                        text =True, plot_en = True)
         superpixel_image = my_pmd_object.superpixel_image_recent
@@ -1850,7 +1894,7 @@ def dense_init_pipeline():
           cache['U'],
           cache['R_orig'],
           cache['s'][:, None] * cache['V'],
-          batch_size=deconv_batch, device=device).astype(np.float64)
+          batch_size=deconv_batch, device=device)
     
     cache['deconvolved_temporal'] = deconv_components
 
@@ -2022,10 +2066,10 @@ def run_masknmf(data_folder, confidence, allowed_overlap, cpu_only,\
     a = a_dense.reshape((d1, d2, -1), order=order)
     
     return a
-  
-        
+
+
 @dash.callback(
-    Output("secondpass_init", "children"), Output("placeholder_demix", "children"), Output("download_demixing_results", "data"), Output("placeholder_post_demixing", "children"), Input("button_id_demix", "n_clicks"), Input("button_id_demix_secondpass", "n_clicks"),
+    Output("secondpass_init", "children"), Output("placeholder_demix", "children"), Output("placeholder_post_demixing", "children"), Input("button_id_demix", "n_clicks"), Input("button_id_demix_secondpass", "n_clicks"),
     prevent_initial_call=True
 )
 def demix_data(n_clicks, n_clickssecondpass):
@@ -2110,9 +2154,9 @@ def demix_data(n_clicks, n_clickssecondpass):
         cache['demixing_results'] = fin_rlt
 
         if button_clicked == "button_id_demix.n_clicks":
-            return " ", dash.no_update, dcc.send_file(save_path), ""
+            return " ", dash.no_update,  ""
         else:
-            return dash.no_update, dash.no_update, dcc.send_file(save_path), ""
+            return dash.no_update, dash.no_update, ""
 
 
 ######
@@ -2254,7 +2298,28 @@ def generate_superpixel_plot_secondpass(value, fig):
         lnmf_params['superpixels_corr_thr'][1] = value
         cache['localnmf_params'] = lnmf_params
         return curr_fig
-            
+     
+        
+        
+########
+### Download results callbacks
+########
+
+@app.callback(
+    Output("download_demixing_results", "data"), Input("download_result_final", "n_clicks")
+)
+def download_demix_video(n_clicks):
+    
+    if cache['save_folder'] is not None:
+        save_path =  os.path.join(cache['save_folder'], "demixingresults.npz")
+        if os.path.exists(save_path) and cache['PMD_object'] is not None and cache['PMD_object'].a is not None:
+            #These two conditions verify that (1) Demixing results actually exist and furthermore, we aren't saving older results 
+            return dcc.send_file(save_path)
+    
+    else:
+        return dash.no_update
+
+    
         
             
         
