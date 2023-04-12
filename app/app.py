@@ -201,27 +201,35 @@ fig_trace_vis.update_layout(title_text="After running registration + PMD, click 
 ## This is for the first pass initialization display
 #####
 default_figsize = (40, 40)
+current_margin = dict(l=10, r=10, t=30, b=20)
+cache['margin'] = current_margin
 cache['default_figsize'] = default_figsize
 pixel_plot = np.zeros(default_figsize)
 fig_local_corr = px.imshow(pixel_plot)
-fig_local_corr.update_layout(title_text="Noise Variance Image: No Results Yet", title_x=0.5)
+fig_local_corr.update_layout(title_text="Noise Variance Image: No Results Yet", title_x=0.5, margin=current_margin)
 fig_local_corr.update_coloraxes(showscale=False)
 fig_local_corr.update(layout_coloraxis_showscale=False)
+fig_local_corr.update_xaxes(showticklabels=False)
+fig_local_corr.update_yaxes(showticklabels=False)
 
 pixel_plot = np.zeros(default_figsize)
 fig_pixel_corr = px.imshow(pixel_plot)
-fig_pixel_corr.update_layout(title_text="Pixelwise Corr. Image: No Results Yet", title_x=0.5)
+fig_pixel_corr.update_layout(title_text="Pixelwise Corr. Image: No Results Yet", title_x=0.5, margin=current_margin)
 fig_pixel_corr.update_coloraxes(showscale=False)
 fig_pixel_corr.update(layout_coloraxis_showscale=False)
 fig_pixel_corr.update_yaxes(showticklabels=False)
+fig_pixel_corr.update_xaxes(showticklabels=False)
 
 
 
 
 pixel_plot = np.zeros(default_figsize)
 fig_superpixel = px.imshow(pixel_plot)
-fig_superpixel.update_layout(title_text="Initialization Image: No Results Yet", title_x=0.5)
+fig_superpixel.update_coloraxes(showscale=False)
+fig_superpixel.update(layout_coloraxis_showscale=False)
+fig_superpixel.update_layout(title_text="Initialization Image: No Results Yet", title_x=0.5, margin=current_margin)
 fig_superpixel.update_yaxes(showticklabels=False)
+fig_superpixel.update_xaxes(showticklabels=False)
 
 
 
@@ -232,16 +240,19 @@ fig_superpixel.update_yaxes(showticklabels=False)
 
 pixel_plot = np.zeros(default_figsize)
 fig_local_corr_secondpass = px.imshow(pixel_plot)
-fig_local_corr_secondpass.update_layout(title_text="Residual Corr. Image: No Results Yet", title_x=0.5)
+fig_local_corr_secondpass.update_layout(title_text="Residual Corr. Image: No Results Yet", title_x=0.5, margin=current_margin)
 fig_local_corr_secondpass.update_coloraxes(showscale=False)
 fig_local_corr_secondpass.update(layout_coloraxis_showscale=False)
+fig_local_corr_secondpass.update_xaxes(showticklabels=False)
+fig_local_corr_secondpass.update_yaxes(showticklabels=False)
 
 pixel_plot = np.zeros(default_figsize)
 fig_pixel_corr_secondpass = px.imshow(pixel_plot)
-fig_pixel_corr_secondpass.update_layout(title_text="Pixelwise Corr. Image: No Results Yet", title_x=0.5)
+fig_pixel_corr_secondpass.update_layout(title_text="Pixelwise Corr. Image: No Results Yet", title_x=0.5, margin=current_margin)
 fig_pixel_corr_secondpass.update_coloraxes(showscale=False)
 fig_pixel_corr_secondpass.update(layout_coloraxis_showscale=False)
 fig_pixel_corr_secondpass.update_yaxes(showticklabels=False)
+fig_pixel_corr_secondpass.update_xaxes(showticklabels=False)
 
 
 
@@ -249,8 +260,11 @@ fig_pixel_corr_secondpass.update_yaxes(showticklabels=False)
 
 pixel_plot = np.zeros(default_figsize)
 fig_superpixel_secondpass = px.imshow(pixel_plot)
-fig_superpixel_secondpass.update_layout(title_text="Superpixel Image: No Results Yet", title_x=0.5)
+fig_superpixel_secondpass.update_coloraxes(showscale=False)
+fig_superpixel_secondpass.update(layout_coloraxis_showscale=False)
+fig_superpixel_secondpass.update_layout(title_text="Superpixel Image: No Results Yet", title_x=0.5,  margin=current_margin)
 fig_superpixel_secondpass.update_yaxes(showticklabels=False)
+fig_superpixel_secondpass.update_xaxes(showticklabels=False)
 
 ######
 ## This is for visualizing the demixing outputs
@@ -597,7 +611,8 @@ app.layout = html.Div(
             
 
         ],
-        align="center"
+        className="g-0",\
+        align="center",\
     ),\
     dbc.Row(
         [
@@ -705,7 +720,7 @@ def generate_post_demixing_results(children):
             )
         new_figure.update_coloraxes(showscale=False)
         new_figure.update(layout_coloraxis_showscale=False)
-        new_figure.update_layout(title_text="Click any pixel to see demixing", title_x=0.5)
+        new_figure.update_layout(title_text="Click any pixel to see demixing", title_x=0.5, margin=cache['margin'])
         return new_figure
     else:
         return dash.no_update
@@ -795,7 +810,8 @@ def update_single_pixel_corr_plot(clickData, local_corr_fig):
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
             curr_fig.update_yaxes(showticklabels=False)
-            curr_fig.update_layout(title_text = "Pixel Corr. Image at ({}, {})".format(y,x),title_x=0.5)
+            curr_fig.update_xaxes(showticklabels=False)
+            curr_fig.update_layout(title_text = "Corr. Image for pixel at ({}, {})".format(y,x),title_x=0.5, margin=cache['margin'])
             return curr_fig
         else:
             return dash.no_update
@@ -825,7 +841,8 @@ def update_single_pixel_corr_plot(clickData, local_corr_fig):
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
             curr_fig.update_yaxes(showticklabels=False)
-            curr_fig.update_layout(title_text = "Corr. Image for pixel at ({},{})".format(y,x),title_x=0.5)
+            curr_fig.update_xaxes(showticklabels=False)
+            curr_fig.update_layout(title_text = "Corr. Image for pixel at ({},{})".format(y,x),title_x=0.5, margin=cache['margin'])
             return curr_fig
             
         else:
@@ -845,8 +862,9 @@ def compute_local_corr_values_and_set_superpixel_value(curr_fig, value):
     if cache['PMD_flag']:
         var_img = cache['noise_var_img']
         curr_fig = px.imshow(var_img.squeeze())
-        curr_fig.update_layout(title_text = "Noise Variance Image".format(value),title_x=0.5)
-        
+        curr_fig.update_layout(title_text = "Noise Variance Image".format(value),title_x=0.5, margin=cache['margin'])
+        curr_fig.update_xaxes(showticklabels=False)
+        curr_fig.update_yaxes(showticklabels=False)
         curr_fig.update_coloraxes(showscale=False)
         curr_fig.update(layout_coloraxis_showscale=False)
         
@@ -881,8 +899,12 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
             zeros_element = np.zeros(default_figsize)
             curr_fig = px.imshow(zeros_element)
         
-        curr_fig = curr_fig.update_layout(title_text="No superpixels - using maskNMF instead")
+        default_margin = cache['margin']
+        curr_fig = curr_fig.update_layout(title_text="No superpixels - using maskNMF instead", title_x=0.5,margin=cache['margin'])
+        curr_fig.update_coloraxes(showscale=False)
+        curr_fig.update(layout_coloraxis_showscale=False)
         curr_fig.update_yaxes(showticklabels=False)
+        curr_fig.update_xaxes(showticklabels=False)
         return curr_fig
     elif cache['PMD_object'] is not None:
         my_pmd_object = cache['PMD_object']
@@ -916,7 +938,10 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
         cache['PMD_object'] = my_pmd_object
         curr_fig = px.imshow(superpixel_image)
         curr_fig.update_yaxes(showticklabels=False)
-        curr_fig.update_layout(title_text = "Superpixels Image, threshold = {}".format(value),title_x=0.5)
+        curr_fig.update_xaxes(showticklabels=False)
+        curr_fig.update_coloraxes(showscale=False)
+        curr_fig.update(layout_coloraxis_showscale=False)
+        curr_fig.update_layout(title_text = "Superpixels Image, threshold = {}".format(value),title_x=0.5, margin=cache['margin'])
         
         ##Update the value
         lnmf_params = cache['localnmf_params']
@@ -2173,7 +2198,8 @@ def get_residual_corr_img(value):
             my_fig = px.imshow(output)
             my_fig.update_coloraxes(showscale=False)
             my_fig.update_yaxes(showticklabels=False)
-            my_fig.update_layout(title_text="Residual Corr. Image", title_x=0.5)
+            my_fig.update_xaxes(showticklabels=False)
+            my_fig.update_layout(title_text="Residual Corr. Image", title_x=0.5, margin = cache['margin'])
             return my_fig
         else:
             return dash.no_update
@@ -2213,7 +2239,8 @@ def update_residual_singlepixel_corr_plot(clickData, local_corr_fig):
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
             curr_fig.update_yaxes(showticklabels=False)
-            curr_fig.update_layout(title_text = "Residual Pixel Corr. Image at height = {}, width = {}".format(y,x),title_x=0.5)
+            curr_fig.update_xaxes(showticklabels=False)
+            curr_fig.update_layout(title_text = "Residual Pixel Corr. Image at height = {}, width = {}".format(y,x),title_x=0.5, margin=cache['margin'])
             return curr_fig
 
         elif button_clicked== "local_correlation_plot_secondpass.figure":        
@@ -2241,7 +2268,8 @@ def update_residual_singlepixel_corr_plot(clickData, local_corr_fig):
 
             curr_fig = px.imshow(final_image, zmin=0, zmax=1)
             curr_fig.update_yaxes(showticklabels=False)
-            curr_fig.update_layout(title_text = "Pixel Corr. Image at ( {},{} )".format(y,x),title_x=0.5)
+            curr_fig.update_xaxes(showticklabels=False)
+            curr_fig.update_layout(title_text = "Pixel Corr. Image at ( {},{} )".format(y,x),title_x=0.5, margin=cache['margin'])
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
             return curr_fig
@@ -2287,7 +2315,10 @@ def generate_superpixel_plot_secondpass(value, fig):
         cache['PMD_object'] = my_pmd_object
         curr_fig = px.imshow(superpixel_image)
         curr_fig.update_yaxes(showticklabels=False)
-        curr_fig.update_layout(title_text = "Superpixels Image, threshold = {}".format(value),title_x=0.5)
+        curr_fig.update_xaxes(showticklabels=False)
+        curr_fig.update_coloraxes(showscale=False)
+        curr_fig.update(layout_coloraxis_showscale=False)
+        curr_fig.update_layout(title_text = "Superpixels Image, threshold = {}".format(value),title_x=0.5, margin=cache['margin'])
         
         ##Update the value
         lnmf_params = cache['localnmf_params']
