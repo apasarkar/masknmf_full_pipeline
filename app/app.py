@@ -9,6 +9,7 @@ import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
 import dash_daq as daq
 import plotly.express as px
+import plotly.io as pio
 import pandas as pd
 
 import time
@@ -69,6 +70,7 @@ def list_dir(path):
 # load_figure_template('LUX')
 stylesheets = [dbc.themes.LUX]
 app = Dash(__name__, background_callback_manager=background_callback_manager, external_stylesheets=stylesheets)
+
 
 
 ##Globally used data structures/info
@@ -738,6 +740,17 @@ def generate_post_demixing_results(children):
     else:
         return dash.no_update
 
+    
+def get_kth_color(colorlist, index):
+    '''
+    Plotly/dash has a default discrete coloring scheme. There's a list of colors in the backend, and as you need more distinct colors in your plot, it cycles through these colors. To make the demixing traces match the demixing plot, we use this coloring scheme to generate a consistent set of colors both times. 
+    '''
+    list_length = len(colorlist)
+    mod_index = (index+1) % list_length
+    
+    return colorlist[mod_index]
+    
+
 @app.callback(
     Output("post_demixing_pixelwise_traces", "figure"),
     Input("post_demixing_summary_image", "clickData"),
@@ -761,23 +774,35 @@ def plot_demixing_result(clickData):
             
             ##Get the PMD Row
             desired_row = my_pmd_object.get_PMD_row(desired_index).cpu().numpy().flatten()
-
-            ##Get the AC Row
-            AC_trace = a.getrow(desired_index).dot(c.T)
-            AC_trace = AC_trace.flatten()
+            
+            input_dict = {"Timesteps": [i for i in range(1, len(desired_row) + 1)], "PMD": desired_row, "Background": background_row}
+            color_discrete_map={"PMD": "#353739", "Background": "#964B00"}
+            
+            default_template = pio.templates["plotly"]
+            current_colormaps = default_template.layout.colorway
             
             
-
+           
+            #Get the individual signal traces 
+            current_a_row= a.getrow(desired_index)
+            nonzero_columns = current_a_row.nonzero()[1]
+            number_nonzeros = nonzero_columns.size
+            
+            for k in range(number_nonzeros):
+                column_index = nonzero_columns[k]
+                signal_string = "Signal {}".format(column_index + 1)
+                a_element = current_a_row.getcol(column_index)
+                c_trace = a_element.dot(c[:, [column_index]].T)
+                
+                input_dict[signal_string] = c_trace.flatten()
+                
+                color_value = get_kth_color(current_colormaps, column_index) 
+                color_discrete_map[signal_string] = color_value
             
             
-            input_dict = {"Timesteps": [i for i in range(1, len(desired_row) + 1)], "PMD": desired_row, "Signal": AC_trace, "Background": background_row}
             trace_df = pd.DataFrame.from_dict(input_dict)
 
-            fig_trace_vis = px.line(trace_df, x='Timesteps', y=trace_df.columns[1:], 
-                color_discrete_map={
-                     "PMD": "#353739",
-                     # "Signal": "#fa8d22"
-                 })
+            fig_trace_vis = px.line(trace_df, x='Timesteps', y=trace_df.columns[1:], color_discrete_map = color_discrete_map)
             fig_trace_vis.update_layout(title_text="Demixing at pixel height = {} width = {}".format(y, x), title_x=0.5)
 
             return fig_trace_vis
