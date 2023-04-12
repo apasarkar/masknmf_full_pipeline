@@ -503,20 +503,21 @@ sidebar_results =  html.Div(
                     [
                         dbc.Button(id="download_result_final", children="Download Demixing Results"),\
                     ],\
-                    width=6,\
+                    width={"size": "auto", "offset":4},
                 ),\
                 dbc.Col(
                     [
                         dbc.Button(id="download_demixing_video", children="Download Short Demixing Video"),\
                     ],\
-                    width=6,\
+                    width={"size": "auto", "offset":0},
                 ),\
                 
-            ]
+            ],
+            align="center"
         ),\
         html.Br(),\
         html.Br(),\
-        html.H5("To the right of this bar, you can visualize the demixing results at single-pixel precision",  style={'textAlign': 'center'}),\
+        html.H5("Above, you can visualize the demixing results at single-pixel precision",  style={'textAlign': 'center'}),\
 
 
     ],
@@ -616,12 +617,12 @@ app.layout = html.Div(
     ),\
     dbc.Row(
         [
-            dbc.Col(
-                [
-                    html.Div([sidebar_results]),\
-                ],\
-                width=3
-            ),\
+            # dbc.Col(
+            #     [
+            #         html.Div([sidebar_results]),\
+            #     ],\
+            #     width=3
+            # ),\
             dbc.Col(
                 [
                     dcc.Graph(
@@ -630,7 +631,7 @@ app.layout = html.Div(
                     ),\
                     html.Div(id='placeholder_post_demixing', children=""),\
                 ],\
-                width=3
+                width=5
             ),\
 
             dbc.Col(
@@ -640,11 +641,23 @@ app.layout = html.Div(
                         figure=fig_post_demixing_pixewise_traces
                     ),\
                 ],\
-                width=6
+                width=7
             ),\
         ],\
+    
     align="center"
     ),\
+     
+    dbc.Row(
+        [
+            dbc.Col(
+                [
+                    html.Div([sidebar_results]),\
+                ],\
+                width=12
+            ),\
+        ]
+        ),\
     ]
 )
 
