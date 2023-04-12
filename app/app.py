@@ -765,6 +765,8 @@ def plot_demixing_result(clickData):
             ##Get the AC Row
             AC_trace = a.getrow(desired_index).dot(c.T)
             AC_trace = AC_trace.flatten()
+            
+            
 
             
             
@@ -946,7 +948,11 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
         
         my_pmd_object.initialize_signals_superpixels(num_plane, cut_off_point, residual_cut, length_cut, th, pseudo_2, \
                                        text =True, plot_en = True)
-        superpixel_image = my_pmd_object.superpixel_image_recent
+        
+        
+        superpixel_image = my_pmd_object.superpixel_image_recent 
+        my_nonzero_image = superpixel_image > 0
+        superpixel_image = (superpixel_image + 40)*10 * my_nonzero_image
         
         cache['PMD_object'] = my_pmd_object
         curr_fig = px.imshow(superpixel_image)
@@ -2323,7 +2329,11 @@ def generate_superpixel_plot_secondpass(value, fig):
         my_pmd_object = cache['PMD_object']
         my_pmd_object.initialize_signals_superpixels(num_plane, cut_off_point, residual_cut, length_cut, th, pseudo_2, \
                                        text =True, plot_en = True)
-        superpixel_image = my_pmd_object.superpixel_image_recent
+        
+        
+        superpixel_image = my_pmd_object.superpixel_image_recent 
+        my_nonzero_image = superpixel_image > 0
+        superpixel_image = (superpixel_image + 40)*10 * my_nonzero_image
         
         cache['PMD_object'] = my_pmd_object
         curr_fig = px.imshow(superpixel_image)
