@@ -22,6 +22,7 @@ import sys
 
 import localnmf
 from localnmf.superpixel_analysis_ring import superpixel_init
+from localnmf.visualization import standard_demix_vid_m
 import scipy
 import scipy.sparse
 import torch_sparse
@@ -510,6 +511,7 @@ sidebar_results =  html.Div(
                 dbc.Col(
                     [
                         dbc.Button(id="download_demixing_video", children="Download Short Demixing Video"),\
+                        dcc.Download(id="download_demixing_video_comp"),\
                     ],\
                     width={"size": "auto", "offset":0},
                 ),\
@@ -843,15 +845,20 @@ def update_single_pixel_corr_plot(clickData, local_corr_fig):
             temp_mat = temp_mat.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
             desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
 
+            start_time = time.time()
             final_image = my_pmd_object.compute_single_pixel_correlation_image(desired_index, residual=False).cpu().numpy()
             final_image = final_image.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
+            print("the actual superpixel bit took {}".format(time.time() - start_time))
 
+            start_time = time.time()
             curr_fig = px.imshow(final_image, zmin=0, zmax=1)
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
             curr_fig.update_yaxes(showticklabels=False)
             curr_fig.update_xaxes(showticklabels=False)
             curr_fig.update_layout(title_text = "Corr. Image for pixel at ({}, {})".format(y,x),title_x=0.5, margin=cache['margin'])
+            
+            print("the figure generation took {}".format(time.time() - start_time))
             return curr_fig
         else:
             return dash.no_update
@@ -873,16 +880,21 @@ def update_single_pixel_corr_plot(clickData, local_corr_fig):
             temp_mat = np.arange(my_pmd_object.shape[0] * my_pmd_object.shape[1])
             temp_mat = temp_mat.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
             desired_index = temp_mat[x, y] ##Note y, x not x,y because the clickback returns the height as the second coordinate
-
+        
+        
+            start_time = time.time()
             final_image = my_pmd_object.compute_single_pixel_correlation_image(desired_index, residual=False).cpu().numpy()
+            print("the actual superpixel bit took {}".format(time.time() - start_time))
             final_image = final_image.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order=my_pmd_object.data_order)
 
+            start_time = time.time()
             curr_fig = px.imshow(final_image, zmin=0, zmax=1)
             curr_fig.update_coloraxes(showscale=False)
             curr_fig.update(layout_coloraxis_showscale=False)
             curr_fig.update_yaxes(showticklabels=False)
             curr_fig.update_xaxes(showticklabels=False)
             curr_fig.update_layout(title_text = "Corr. Image for pixel at ({},{})".format(y,x),title_x=0.5, margin=cache['margin'])
+            print("the figure generation took {}".format(time.time() - start_time))
             return curr_fig
             
         else:
@@ -2383,18 +2395,47 @@ def generate_superpixel_plot_secondpass(value, fig):
 @app.callback(
     Output("download_demixing_results", "data"), Input("download_result_final", "n_clicks")
 )
-def download_demix_video(n_clicks):
+def download_demix_results_button_click(n_clicks):
     
     if cache['save_folder'] is not None:
         save_path =  os.path.join(cache['save_folder'], "demixingresults.npz")
         if os.path.exists(save_path) and cache['PMD_object'] is not None and cache['PMD_object'].a is not None:
             #These two conditions verify that (1) Demixing results actually exist and furthermore, we aren't saving older results 
             return dcc.send_file(save_path)
+        else:
+            return dash.no_update
     
     else:
         return dash.no_update
 
+  
+
+
+
+@app.callback(
+    Output("download_demixing_video_comp", "data"), Input("download_demixing_video", "n_clicks"),\
+    prevent_initial_call = True
+)
+def download_demix_video_button_click(n_clicks):
+    if cache['save_folder'] is not None:
+        save_path =  os.path.join(cache['save_folder'], "demixingresults.npz")
+        if os.path.exists(save_path) and cache['PMD_object'] is not None and cache['PMD_object'].a is not None:
+            fin_rlt_file = np.load(save_path, allow_pickle=True)
+            fin_rlt = fin_rlt_file['final_results'].item()
+            start_frame = 400
+            end_frame = min(cache['PMD_object'].shape[2], start_frame + 400)
+            dim1_range = [0, cache['PMD_object'].shape[0]]
+            dim2_range = [0, cache['PMD_object'].shape[1]]
+            filename = "demixing_video"
+            # print(os.getcwd())
+            standard_demix_vid_m(fin_rlt, start_frame, end_frame, dim1_range, dim2_range, filename=filename)
+            # print(os.path.exists(filename+".mp4"))
+            return dcc.send_file(filename+".mp4")
+        else:
+            return dash.no_update
     
+    else:
+        return dash.no_update
         
             
         
