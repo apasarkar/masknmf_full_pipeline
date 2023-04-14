@@ -1,9 +1,10 @@
 # Run this app with `python app.py` and
 # visit http://127.0.0.1:8050/ in your web browser.
 
+import copy
 import os
 import dash
-from dash import Dash, dcc, html, ctx
+from dash import Dash, dcc, html, ctx, Patch
 from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
@@ -155,7 +156,15 @@ cache['first_pass_init_method'] = 'masknmf'
 img = np.random.rand(3,50,50)*0
 mc_pmd_vis_frames = [i for i in range(100)]
 fig_mc_pmd_plots = px.imshow(img, facet_col=0)
-fig_mc_pmd_plots.update(layout_coloraxis_showscale=True)
+
+test = fig_mc_pmd_plots.layout.coloraxis
+fig_mc_pmd_plots.update(layout_coloraxis_showscale=False)
+
+
+fig_mc_pmd_plots.update_layout(coloraxis2=test, coloraxis3=test)
+
+for i, t in enumerate(fig_mc_pmd_plots.data):
+    t.update(coloraxis=f"coloraxis{i+1}")
 
 img_name_list = ["No Results Yet", "No Results Yet", "No Results Yet"]
 for i, name in enumerate(img_name_list):
@@ -1052,44 +1061,36 @@ def load_mc_frame(index):
     return data
 
 def get_PMD_frame(index):
-    RV = cache['R'].dot(cache['V'][:, [index]])
-    URV = cache['U'].dot(RV)
-    
-
-    URV = URV.reshape(cache['shape'][:2], order=cache['order'])
-    URV *= cache['noise_var_img']
-    URV += cache['mean_img']
-    URV -= np.amin(URV)
+    my_pmd_object = cache['PMD_object']
+    RV = torch.matmul(my_pmd_object.R, my_pmd_object.V[:, [index]])
+    URV = torch_sparse.matmul(my_pmd_object.U_sparse, RV).cpu().numpy()
+    URV = URV.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order = my_pmd_object.data_order)
     return URV
         
     
-@app.callback(Output('example-graph', 'figure'), Input('example-graph', 'figure'), Input("pmd_mc_slider", "value"))
-def update_motion_image(curr_fig, value):
-    if cache['navigated_file'] == cache['no_file_flag']:
-        return dash.no_update
-    else:
-        
+@app.callback(Output('example-graph', 'figure'), Input("pmd_mc_slider", "value"))
+def update_motion_image(value):
+    if cache['PMD_object'] is not None:
         min_val, max_val = (0, cache['shape'][2]-1)
         value = max(min_val, value)
         value = min(max_val, value)
         used_data = [load_mc_frame(value), get_PMD_frame(value), cache['noise_var_img']]
         
         max_val = max(np.amax(used_data[0]), np.amax(used_data[1]))
-        
-        if np.amax(used_data[2]) != 0:
-            final_noise_var_img = max_val/(np.amax(used_data[2])) * used_data[2]
-            used_data[2] = final_noise_var_img
+        curr_fig = Patch()
 
 
         num_imgs = 3 ##HARDCODED FOR NOW, CHANGE IF NEEDED
         for i in range(3):
             curr_fig['data'][i]['z'] = used_data[i]
 
-        img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-denoised Frame {}".format(value+1), "Scaled Noise Variance Image Frame {}".format(value+1)]
+        img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-compressed Frame {}".format(value+1), "Noise Variance Image Frame {}".format(value+1)]
         for i, name in enumerate(img_name_list):
             curr_fig['layout']['annotations'][i]['text'] = img_name_list[i]
 
         return curr_fig
+    else:
+        return dash.no_update
 
     
     
