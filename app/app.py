@@ -1,6 +1,5 @@
 # Run this app with `python app.py` and
 # visit http://127.0.0.1:8050/ in your web browser.
-
 import copy
 import os
 import dash
@@ -22,7 +21,6 @@ import json
 import sys
 
 import localnmf
-from localnmf.superpixel_analysis_ring import superpixel_init
 from localnmf.visualization import standard_demix_vid_m
 import scipy
 import scipy.sparse
@@ -38,7 +36,7 @@ import torch
 import localnmf 
 from localnmf import superpixel_analysis_ring
 from localnmf.pmd_video import PMDVideo
-from localnmf.pmd_video import local_correlation_mat
+from localnmf.pmd_video import local_correlation_mat, superpixel_init
 from localnmf_functions import get_single_pixel_corr_img
 import math
 import jax
@@ -58,7 +56,8 @@ import tifffile
 # Diskcache for non-production apps when developing locally
 import diskcache
 
-large_cache_size = 1073741824 * 15
+print("TEST")
+large_cache_size = 1073741824 * 15 ##15 Gigabyte Allocation
 cache = diskcache.Cache("./cache", size_limit = large_cache_size )
 
 print("THE DEFAULT SIZE OF CACHE IS {}".format(cache.size_limit))
@@ -1033,14 +1032,12 @@ def get_points(clickData):
 )
 def click(clickData):
     x, y = get_points(clickData)
-    if cache['PMD_flag']:
+    if cache['PMD_object'] is not None:
         temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
         temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
         desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
         
-        desired_row = (cache['U'].getrow(desired_index).dot(cache['R'])).dot(cache['V']).flatten()
-        
-        trace = desired_row.flatten()
+        trace = cache['PMD_object'].get_PMD_row(desired_index).cpu().numpy().flatten()
         trace = pd.DataFrame(trace, columns = ['X'])
         fig_trace_vis = px.line(trace, y="X", 
                        labels={
@@ -1060,30 +1057,28 @@ def load_mc_frame(index):
     data = np.array(tifffile.imread(cache['navigated_file'], key=index))
     return data
 
+
 def get_PMD_frame(index):
     my_pmd_object = cache['PMD_object']
-    RV = torch.matmul(my_pmd_object.R, my_pmd_object.V[:, [index]])
-    URV = torch_sparse.matmul(my_pmd_object.U_sparse, RV).cpu().numpy()
-    URV = URV.reshape((my_pmd_object.shape[0], my_pmd_object.shape[1]), order = my_pmd_object.data_order)
-    return URV
+    return my_pmd_object.get_PMD_frame(index).cpu().numpy()
         
     
 @app.callback(Output('example-graph', 'figure'), Input("pmd_mc_slider", "value"))
 def update_motion_image(value):
     if cache['PMD_object'] is not None:
+        
         min_val, max_val = (0, cache['shape'][2]-1)
         value = max(min_val, value)
         value = min(max_val, value)
-        used_data = [load_mc_frame(value), get_PMD_frame(value), cache['noise_var_img']]
-        
+        used_data = [load_mc_frame(value), get_PMD_frame(value)]
         max_val = max(np.amax(used_data[0]), np.amax(used_data[1]))
         curr_fig = Patch()
-
-
+        
         num_imgs = 3 ##HARDCODED FOR NOW, CHANGE IF NEEDED
-        for i in range(3):
+        for i in range(num_imgs - 1):
             curr_fig['data'][i]['z'] = used_data[i]
-
+        if value == 0:
+            curr_fig['data'][num_imgs-1]['z'] = cache['noise_var_img']
         img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-compressed Frame {}".format(value+1), "Noise Variance Image Frame {}".format(value+1)]
         for i, name in enumerate(img_name_list):
             curr_fig['layout']['annotations'][i]['text'] = img_name_list[i]
@@ -1632,7 +1627,6 @@ def register_and_compress_data(n_clicks):
         mc_dict['max_shifts'] = max_shifts
         mc_dict['splits_els'] = splits
         mc_dict['splits_rig'] = splits
-
 
         corrector = motion_correction.MotionCorrect(target, dview=dview, **mc_dict)
 
@@ -2443,4 +2437,4 @@ def download_demix_video_button_click(n_clicks):
         
 if __name__ == '__main__':
     port_number = 8900
-    app.run_server(host='0.0.0.0',debug=True, port=port_number)
+    app.run_server(host='0.0.0.0', debug=True, port=port_number)
