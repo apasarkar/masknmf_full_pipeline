@@ -2,8 +2,15 @@
 # visit http://127.0.0.1:8050/ in your web browser.
 import copy
 import os
+import time
+import datetime
+import shutil
+import json 
+import sys
+
+##Dash imports
 import dash
-from dash import Dash, dcc, html, ctx, Patch
+from dash import Dash, dcc, html, ctx, Patch, DiskcacheManager, CeleryManager, Input, Output
 from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import load_figure_template
@@ -12,36 +19,27 @@ import plotly.express as px
 import plotly.io as pio
 import pandas as pd
 
-import time
-import datetime
-from dash import DiskcacheManager, CeleryManager, Input, Output, html
-import shutil
-import numpy as np
-import json 
-import sys
-
+#LocalNMF general imports
 import localnmf
 from localnmf.visualization import standard_demix_vid_m
-import scipy
-import scipy.sparse
-import torch_sparse
-import localnmf 
-from localnmf import superpixel_analysis_ring
-import os
-import numpy as np
-import scipy
-import scipy.sparse
-import torch_sparse
-import torch
-import localnmf 
 from localnmf import superpixel_analysis_ring
 from localnmf.pmd_video import PMDVideo
 from localnmf.pmd_video import local_correlation_mat, superpixel_init
 from localnmf_functions import get_single_pixel_corr_img
+from localnmf import superpixel_analysis_ring
+
+#Scientific computation imports
+import numpy as np
+import scipy
+import scipy.sparse 
+import torch_sparse
+import torch
+import localnmf 
 import math
 import jax
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".70"
+# jax.config.update('jax_platform_name', 'cpu')
 
 import tifffile
 
@@ -55,8 +53,6 @@ import tifffile
 # else:
 # Diskcache for non-production apps when developing locally
 import diskcache
-
-print("TEST")
 large_cache_size = 1073741824 * 15 ##15 Gigabyte Allocation
 cache = diskcache.Cache("./cache", size_limit = large_cache_size )
 
@@ -107,14 +103,16 @@ mc_params = {
     'gSig_filt':[3,3],
 }
 
-pmd_params = {
+pmd_params_dict = {
     'block_height':20,
     'block_width':20,
     'overlaps_height':10,
     'overlaps_width':10,
-    'window_length':6000,
-    'background_rank':15,
+    'frames_to_init':5000,
+    'background_rank':1,
     'deconvolve':True,
+    'max_consec_failures':1,
+    'max_components':40,
 }
 
 localnmf_params = {
@@ -146,7 +144,7 @@ localnmf_params = {
 
 
 cache['mc_params'] = mc_params
-cache['pmd_params'] = pmd_params
+cache['pmd_params'] = pmd_params_dict
 cache['localnmf_params'] = localnmf_params
 cache['demixing_results'] = None
 cache['first_pass_init_method'] = 'masknmf'
@@ -177,14 +175,14 @@ for i, name in enumerate(img_name_list):
 block_pmd_1 = html.Div(
     [
         html.P("Pick height block dimension between 10 and 50",  style={'textAlign': 'center'}),
-        dbc.Input(type="number", id="block_pmd_1", min=10, max=50, value = pmd_params['block_height'], step=1,  style={'textAlign': 'center'}),
+        dbc.Input(type="number", id="block_pmd_1", min=10, max=50, value = pmd_params_dict['block_height'], step=1,  style={'textAlign': 'center'}),
     ],
 )
 
 block_pmd_2 = html.Div(
     [
         html.P("Pick width block dimension between 10 and 50",  style={'textAlign': 'center'}),
-        dbc.Input(type="number",id="block_pmd_2", min=10, max=50, value=pmd_params['block_width'], step=1, style={'textAlign': 'center'}),
+        dbc.Input(type="number",id="block_pmd_2", min=10, max=50, value=pmd_params_dict['block_width'], step=1, style={'textAlign': 'center'}),
     ],
 )
 
@@ -1675,7 +1673,6 @@ def register_and_compress_data(n_clicks):
             input_file = data_name
             import jax
             jax.clear_backends()
-            torch.cuda.empty_cache()
     except Exception as e:
         print(e)
         display("Program crashed.")
@@ -1694,6 +1691,8 @@ def register_and_compress_data(n_clicks):
     data_folder = cache['save_folder'] 
 
     pmd_params_dict = cache['pmd_params']
+            
+    #NOTE: this data folder will also contain the location of the TestData
     block_height = pmd_params_dict['block_height']
     block_width = pmd_params_dict['block_width'] 
     block_sizes = [block_height, block_width]
@@ -1713,25 +1712,50 @@ def register_and_compress_data(n_clicks):
 
     overlap = [overlaps_height, overlaps_width]
 
-
-    window_length = pmd_params_dict['window_length'] 
-    if window_length <= 0:
-        print("Window length cannot be negative! Resetting to 6000")
-        window_length = 6000
-    start = 0
-    end = window_length
-
+    max_consec_failures = pmd_params_dict['max_consec_failures']
+    frames_to_init = pmd_params_dict['frames_to_init']
     background_rank = pmd_params_dict['background_rank'] 
-    deconvolve=True
-    deconv_batch=1000
 
-    ###THESE PARAMS ARE NOT MODIFIED
+    ###THESE PARAMS ARE NEVER MODIFIED
     sim_conf = 5
-    max_rank_per_block = 40 
 
     #@markdown Keep run_deconv true unless you do not want to run maskNMF demixing
-    run_deconv = True
-    max_components = max_rank_per_block
+    max_components = pmd_params_dict['max_components']
+    dtype="float32"
+    order = "F"
+    frame_batch_size = 100
+    pixel_batch_size = 10000
+
+    #     block_height = pmd_params_dict['block_height']
+    #     block_width = pmd_params_dict['block_width'] 
+    #     block_sizes = [block_height, block_width]
+
+#     overlaps_height = pmd_params_dict['overlaps_height'] 
+#     overlaps_width = pmd_params_dict['overlaps_width'] 
+
+#     if overlaps_height > block_height: 
+#         print("Overlaps height was set to be greater than block height, which is not valid")
+#         print("Setting overlaps to be 5")
+#         overlaps_height = 5
+
+#     if overlaps_width > block_width:
+#         print("Overlaps width was set to be greater than width height, which is not valid \
+#         Setting overlaps to be 5")
+#         overlaps_width = 5
+
+#     overlap = [overlaps_height, overlaps_width]
+
+
+#     window_length = pmd_params_dict['window_length'] 
+#     if window_length <= 0:
+#         print("Window length cannot be negative! Resetting to 6000")
+#         window_length = 6000
+#     start = 0
+#     end = window_length
+
+#     background_rank = pmd_params_dict['background_rank'] 
+
+    
 
     INPUT_PARAMS = {
         # Caiman Internal:
@@ -1739,10 +1763,9 @@ def register_and_compress_data(n_clicks):
         'block_width':block_width,
         'overlaps_height':overlaps_height,
         'overlaps_width':overlaps_width,
-        'window_length':window_length,
+        'frames_to_init':frames_to_init,
         'background_rank':background_rank,
-        'max_rank_per_block':max_rank_per_block,
-        'run_deconv':run_deconv 
+        'max_components':max_components,
         }
     }
 
@@ -1816,68 +1839,54 @@ def register_and_compress_data(n_clicks):
         display("Verbose config written successfully.")
 
 
-    def perform_localmd_pipeline(input_file, block_sizes, overlap, frame_range, background_rank, \
+    def perform_localmd_pipeline(input_file, block_sizes, overlap, frames_to_init, background_rank, \
                             max_components, sim_conf, \
-                             tiff_batch_size,deconv_batch, folder, run_deconv=True, pixel_batch_size=100,\
-                            batching=5, dtype="float32",  order="F", corrector = None):
+                             folder, frame_batch_size = 100, pixel_batch_size=100,\
+                            batching=5, dtype="float32",  order="F", corrector = None, max_consec_failures=1):
 
         from localmd.decomposition import localmd_decomposition, display
-        import localmd.tiff_loader as tiff_loader
-        import scipy
-        import scipy.sparse
-        import jax
-        import jax.scipy
-        import jax.numpy as jnp
-        import numpy as np
-        from jax import jit, vmap
-        import functools
-        from functools import partial
-        import time
-        import torch
+        from localmd.dataset import MultipageTiffDataset
 
-        start, end = frame_range[0], frame_range[1]
-
+        current_dataset = MultipageTiffDataset(input_file)
 
         #Reshape U using order="F" here
-        U, R, s, V, tiff_loader_obj = localmd_decomposition(input_file, block_sizes, overlap, [start, end], \
-                                        max_components=max_components, background_rank = background_rank, sim_conf=sim_conf,\
-                                         tiff_batch_size=tiff_batch_size,pixel_batch_size=pixel_batch_size, batching=batching, dtype=dtype, order=order, \
-                                         num_workers=0, frame_corrector_obj = corrector)
-
+        U, R, s, V, std_img, mean_img, data_shape, data_order = localmd_decomposition(current_dataset, block_sizes, overlap, frames_to_init, max_components=max_components, background_rank = background_rank, sim_conf=sim_conf,\
+                                 frame_batch_size=frame_batch_size,pixel_batch_size=pixel_batch_size, dtype=dtype, order=order, \
+                                 num_workers=0, frame_corrector_obj = corrector, max_consec_failures=max_consec_failures)
 
 
         
             
         
-        def save_decomposition(U, R, s, V, load_obj, folder, order="F"):
+        def save_decomposition(U, R, s, V, std_img, mean_img, data_shape, data_order, folder, order="F"):
             '''
             Write results to temporary location 
-            
             '''
             file_name = "decomposition.npz"
             final_path = os.path.join(folder, file_name)
 
             #Write to cache for quick access
             cache['U'] = U
-            cache['order'] = order
+            cache['order'] = data_order
             cache['R_orig'] = R
             cache['R'] = R * s[None, :]
             cache['s'] = s
             cache['V'] = V
-            cache['shape'] = load_obj.shape
-            cache['mean_img'] = tiff_loader_obj.mean_img
-            cache['noise_var_img'] = tiff_loader_obj.std_img
+            cache['shape'] = data_shape
+            cache['mean_img'] = mean_img
+            cache['noise_var_img'] = std_img
             cache['PMD_flag'] = True
             
             ##Slowly work in the PMD Video to the app 
+            import torch
             if torch.cuda.is_available():
                 device='cuda'
             else:
                 device = 'cpu'
-            cache['PMD_object'] = PMDVideo(U.tocsr(), R, s, V, cache['shape'], data_order=order, device=device)
+            cache['PMD_object'] = PMDVideo(U.tocsr(), R, s, V, data_shape, data_order=data_order, device=device)
             
-            np.savez(final_path, fov_shape = load_obj.shape[:2], \
-                fov_order=order, U_data = U.data, \
+            np.savez(final_path, fov_shape = data_shape[:2], \
+                fov_order=data_order, U_data = U.data, \
                 U_indices = U.indices,\
                 U_indptr=U.indptr, \
                 U_shape = U.shape, \
@@ -1885,37 +1894,24 @@ def register_and_compress_data(n_clicks):
                 R = R, \
                 s = s, \
                 Vt = V, \
-                 mean_img = tiff_loader_obj.mean_img, \
-                 noise_var_img = tiff_loader_obj.std_img)
+                 mean_img = mean_img, \
+                 noise_var_img = std_img)
 
             display("the decomposition.npz file is saved at {}".format(folder))
 
 
         ##Step 2i: Save the results: 
-        save_decomposition(U.tocsr(), R, s, V, tiff_loader_obj, folder, order=order)
-
-
-
-    tiff_batch_size = 500
+        save_decomposition(U.tocsr(), R, s, V, std_img, mean_img, data_shape, data_order, folder, order=order)
+        
     import jax
-    import torch
     jax.clear_backends()
-    torch.cuda.empty_cache()
     params = load_config(INPUT_PARAMS)
-    print(params)
     write_params(os.path.join(outdir, "CompressionConfig.yaml"),
                 default=INPUT_PARAMS,
                 **params)
-
-    import localmd
-    from localmd.decomposition import threshold_heuristic
-    from localmd import tiff_loader
-    from jnormcorre.motion_correction import frame_corrector 
-    from masknmf.engine.sparsify import get_factorized_projection
-    pmdresults = perform_localmd_pipeline(input_file, block_sizes, overlap, [start, end], background_rank, \
-                          max_components, sim_conf, tiff_batch_size,deconv_batch,data_folder, pixel_batch_size=100, run_deconv=run_deconv,\
-                          batching=5, dtype="float32",  order="F", corrector = corrector)
-    torch.cuda.empty_cache()
+    _ = perform_localmd_pipeline(input_file, block_sizes, overlap, frames_to_init, background_rank, \
+                          max_components, sim_conf, data_folder, frame_batch_size=frame_batch_size,pixel_batch_size=pixel_batch_size,\
+                          batching=5, dtype="float32",  order="F", corrector = corrector, max_consec_failures=max_consec_failures)
     jax.clear_backends() 
 
     downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
@@ -2210,8 +2206,7 @@ def demix_data(n_clicks, n_clickssecondpass):
         my_pmd_object = cache['PMD_object']
             
         with torch.no_grad():
-            
-            a, c, b, X, W, res, corr_img_all_r, num_list = superpixel_analysis_ring.update_AC_bg_l2_Y_ring_lowrank(my_pmd_object, maxiter, corr_th_fix, corr_th_fix_sec, corr_th_del, switch_point, skips, merge_corr_thr, merge_overlap_thr, ring_radius, denoise=denoise, plot_en=plot_en, plot_debug=plot_debug, update_after=update_after)
+            a, c, b, W, res, corr_img_all_r, num_list = superpixel_analysis_ring.update_AC_bg_l2_Y_ring_lowrank(my_pmd_object, maxiter, corr_th_fix, corr_th_fix_sec, corr_th_del, switch_point, skips, merge_corr_thr, merge_overlap_thr, ring_radius, denoise=denoise, plot_en=plot_en, plot_debug=plot_debug, update_after=update_after)
             W_final = W.create_complete_ring_matrix(a)
             fin_rlt = {'U_sparse': my_pmd_object.U_sparse.cpu().to_scipy().tocsr(), 'R': my_pmd_object.R.cpu().numpy(), 'V': my_pmd_object.V.cpu().numpy(), 'a':a, 'c':c, 'b':b, "W":W_final, 'res':res, 'corr_img_all_r':corr_img_all_r, 'num_list':num_list, 'data_order': my_pmd_object.data_order, 'data_shape':my_pmd_object.shape};
             
