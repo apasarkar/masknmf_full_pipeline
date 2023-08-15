@@ -106,11 +106,8 @@ mc_params = {
 pmd_params_dict = {
     'block_height':20,
     'block_width':20,
-    'overlaps_height':10,
-    'overlaps_width':10,
     'frames_to_init':5000,
     'background_rank':1,
-    'deconvolve':True,
     'max_consec_failures':1,
     'max_components':40,
 }
@@ -1226,7 +1223,6 @@ def register_and_compress_data(n_clicks):
         register = True
     else:
         register = False
-    devel = mc_params_dict['devel']
 
     dx = mc_params_dict['dx'] 
     dy = mc_params_dict['dy'] 
@@ -1250,16 +1246,14 @@ def register_and_compress_data(n_clicks):
 
     overlaps = (overlaps_x, overlaps_y)
 
-    border_nan = 'copy'
+    niter_rig = mc_params_dict['niter_rig'] 
+    niter_els = mc_params_dict['niter_els']
 
-    niter_rig = mc_params_dict['niter_rig'] #2 #@param {type:"slider", min:1, max:10, step:1}
-    niter_els = mc_params_dict['niter_els'] #2 #@param {type:"slider", min:1, max:10, step:1}
+    pw_rigid = mc_params_dict['pw_rigid'] 
 
-    pw_rigid = mc_params_dict['pw_rigid'] #True #@param {type:"boolean"}
-
-    use_gSig_filt = mc_params_dict['use_gSig_filt'] #False #@param {type:"boolean"}
-    gSig_filt_x = mc_params_dict['gSig_filt'] #3 #@param {type:"slider", min:0, max:30, step:1}
-    gSig_filt_y = mc_params_dict['gSig_filt'] #3 #@param {type:"slider", min:0, max:30, step:1}
+    use_gSig_filt = mc_params_dict['use_gSig_filt'] 
+    gSig_filt_x = mc_params_dict['gSig_filt']
+    gSig_filt_y = mc_params_dict['gSig_filt']
     
     sketch_template = True
 
@@ -1272,19 +1266,18 @@ def register_and_compress_data(n_clicks):
 
     INPUT_PARAMS = {
         # Caiman Internal:
-        'local': {'devel': devel},
         'caiman': {'dxy': dxy,
                    'max_shift_um': max_shift_um,
                    'max_deviation_rigid': max_deviation_rigid,
                    'patch_motion_um': patch_motion_um,
                    'overlaps': overlaps,
-                   'border_nan': 'copy',
                    'niter_rig': niter_rig,
                    'niter_els': niter_els,
                    'pw_rigid': pw_rigid,
                    'gSig_filt': gSig_filt,
                    'splits' : frames_per_split,
-                   'sketch_template': True},
+                   'sketch_template': True,
+                   'save_movie':False},
     }
 
 
@@ -1316,29 +1309,6 @@ def register_and_compress_data(n_clicks):
         tag = '[' + datetime.datetime.today().strftime('%y-%m-%d %H:%M:%S') + ']: '
         sys.stdout.write(tag + msg + '\n')
         sys.stdout.flush()
-
-    def parinit():
-        """
-        Initializer run by each process in multiprocessing pool.
-        """
-        os.environ['MKL_NUM_THREADS'] = "1"
-        os.environ['OMP_NUM_THREADS'] = "1"
-        os.environ['OPENBLAS_NUM_THREADS'] = '1'
-        num_cpu = multiprocessing.cpu_count()
-        os.system('taskset -cp 0-%d %s > /dev/null' % (num_cpu, os.getpid()))
-
-
-    def runpar(function, arguments, nproc=None, **kwargs):
-        """
-        Maps an input function to a sequence of arguments.
-        """
-        if nproc is None:
-            nproc = multiprocessing.cpu_count()
-        with multiprocessing.Pool(initializer=parinit, processes=nproc) as pool:
-            res = pool.map(functools.partial(function, **kwargs), arguments)
-        pool.join()
-        return res
-
 
     def flatten(mapping):
         """
@@ -1526,12 +1496,11 @@ def register_and_compress_data(n_clicks):
                        max_deviation_rigid = 3,
                        patch_motion_um = (100., 100.),
                        overlaps = (24, 24),
-                       border_nan= 'copy',
                        niter_rig = 4,
                        splits=200,
                        pw_rigid = True,
                        gSig_filt=None,
-                       save_movie=True,
+                       save_movie=False,
                        dtype='int16',
                        sketch_template=False,
                        **params):
@@ -1554,8 +1523,6 @@ def register_and_compress_data(n_clicks):
             Patch size for non rigid correction in um
         overlaps:
             Overlap between patches
-        border_nan: 
-            See linked caiman docs for details
         niter_rig: int
             Number of passes of rigid motion correction (used to estimate template)
         splits: int
@@ -1581,25 +1548,19 @@ def register_and_compress_data(n_clicks):
         splits = math.ceil(total_frames_firstfile / splits)
         display("Number of chunks is {}".format(splits))
 
-        # Since running on colab, which has only 2 vCPU, don't use multiprocessing, use GPU or TPU since the main compute is implemented in jax
-        dview=None
-
-
+        ## TODO: Eliminate this convention where we include the default parameters both in the function signature above and here
         # Default MC_dict
         mc_dict = {
-        'border_nan': 'copy',               # flag for allowing NaN in the boundaries
         'max_deviation_rigid': 3,           # maximum deviation between rigid and non-rigid
         'max_shifts': (6, 6),               # maximum shifts per dimension (in pixels)
         'min_mov': -5,                      # minimum value of movie
         'niter_rig': 4,                     # number of iterations rigid motion correction
         'niter_els': 1,                     # number of iterations of piecewise rigid motion correction
         'nonneg_movie': True,               # flag for producing a non-negative movie
-        'num_frames_split': 80,             # split across time every x frames
         'num_splits_to_process_els': None,  # The number of splits of the data which we use to estimate the template for the rigid motion correction. If none, we look at entire dataset.
         'num_splits_to_process_rig': None,  # The number of splits of the data which we use to estimate the template for pwrigid motion correction. If none, we look at entire dataset.
         'overlaps': (32, 32),               # overlap between patches in pw-rigid motion correction
         'pw_rigid': False,                  # flag for performing pw-rigid motion correction
-        'shifts_opencv': True,              # flag for applying shifts using cubic interpolation (otherwise FFT)
         'splits_els': 14,                   # number of splits across time for pw-rigid registration
         'splits_rig': 14,                   # number of splits across time for rigid registration
         'strides': (96, 96),                # how often to start a new patch in pw-rigid registration
@@ -1615,7 +1576,8 @@ def register_and_compress_data(n_clicks):
         mc_dict['strides'] = strides
         mc_dict['overlaps'] = overlaps
         mc_dict['max_deviation_rigid'] = max_deviation_rigid
-        mc_dict['border_nan'] = 'copy'
+
+        #Add these as formal parameters
         mc_dict['niter_rig'] = niter_rig
         mc_dict['niter_els'] = niter_els
         if sketch_template:
@@ -1626,16 +1588,19 @@ def register_and_compress_data(n_clicks):
         mc_dict['splits_els'] = splits
         mc_dict['splits_rig'] = splits
 
-        corrector = motion_correction.MotionCorrect(target, dview=dview, **mc_dict)
+        corrector = motion_correction.MotionCorrect(target, **mc_dict)
 
         # Run MC, Always Saving Non-Final Outputs For Use In Next Iteration
-        corrector_obj = corrector.motion_correct(
-            save_movie=False
+        corrector_obj, target_file = corrector.motion_correct(
+            save_movie=save_movie
         )
-
+        display("target file is {}".format(target_file))
+        if target_file[0] is None:
+            display("No file was written out, will register and compress on the fly")
+            display(filename)
+            target_file = [filename]
 
         display("Motion correction completed.")
-
 
         # Save Frame-wise Shifts
         display(f"Saving computed shifts to ({outdir})...")
@@ -1646,8 +1611,7 @@ def register_and_compress_data(n_clicks):
         display('Shifts saved as "shifts.npz".')
 
         corrector_obj.batching=10 ##Long term need to avoid this...
-        return corrector_obj, target
-
+        return corrector_obj, target_file
 
     # Get data and config filenames from cmd line args
     data_name = input_file
@@ -1692,25 +1656,12 @@ def register_and_compress_data(n_clicks):
 
     pmd_params_dict = cache['pmd_params']
             
+
     #NOTE: this data folder will also contain the location of the TestData
     block_height = pmd_params_dict['block_height']
     block_width = pmd_params_dict['block_width'] 
+
     block_sizes = [block_height, block_width]
-
-    overlaps_height = pmd_params_dict['overlaps_height'] 
-    overlaps_width = pmd_params_dict['overlaps_width'] 
-
-    if overlaps_height > block_height: 
-        print("Overlaps height was set to be greater than block height, which is not valid")
-        print("Setting overlaps to be 5")
-        overlaps_height = 5
-
-    if overlaps_width > block_width:
-        print("Overlaps width was set to be greater than width height, which is not valid \
-        Setting overlaps to be 5")
-        overlaps_width = 5
-
-    overlap = [overlaps_height, overlaps_width]
 
     max_consec_failures = pmd_params_dict['max_consec_failures']
     frames_to_init = pmd_params_dict['frames_to_init']
@@ -1719,58 +1670,22 @@ def register_and_compress_data(n_clicks):
     ###THESE PARAMS ARE NEVER MODIFIED
     sim_conf = 5
 
-    #@markdown Keep run_deconv true unless you do not want to run maskNMF demixing
     max_components = pmd_params_dict['max_components']
-    dtype="float32"
-    order = "F"
-    frame_batch_size = 100
+
+    corrector = None
+
+    frame_batch_size = 2000
     pixel_batch_size = 10000
-
-    #     block_height = pmd_params_dict['block_height']
-    #     block_width = pmd_params_dict['block_width'] 
-    #     block_sizes = [block_height, block_width]
-
-#     overlaps_height = pmd_params_dict['overlaps_height'] 
-#     overlaps_width = pmd_params_dict['overlaps_width'] 
-
-#     if overlaps_height > block_height: 
-#         print("Overlaps height was set to be greater than block height, which is not valid")
-#         print("Setting overlaps to be 5")
-#         overlaps_height = 5
-
-#     if overlaps_width > block_width:
-#         print("Overlaps width was set to be greater than width height, which is not valid \
-#         Setting overlaps to be 5")
-#         overlaps_width = 5
-
-#     overlap = [overlaps_height, overlaps_width]
-
-
-#     window_length = pmd_params_dict['window_length'] 
-#     if window_length <= 0:
-#         print("Window length cannot be negative! Resetting to 6000")
-#         window_length = 6000
-#     start = 0
-#     end = window_length
-
-#     background_rank = pmd_params_dict['background_rank'] 
-
-    
+    dtype="float32"
 
     INPUT_PARAMS = {
-        # Caiman Internal:
         'localmd':{'block_height':block_height,
         'block_width':block_width,
-        'overlaps_height':overlaps_height,
-        'overlaps_width':overlaps_width,
         'frames_to_init':frames_to_init,
         'background_rank':background_rank,
         'max_components':max_components,
         }
     }
-
-    block_sizes = block_sizes
-    overlap = overlap
 
     def load_config(default):
         """
@@ -1839,7 +1754,7 @@ def register_and_compress_data(n_clicks):
         display("Verbose config written successfully.")
 
 
-    def perform_localmd_pipeline(input_file, block_sizes, overlap, frames_to_init, background_rank, \
+    def perform_localmd_pipeline(input_file, block_sizes, frames_to_init, background_rank, \
                             max_components, sim_conf, \
                              folder, frame_batch_size = 100, pixel_batch_size=100,\
                             batching=5, dtype="float32",  order="F", corrector = None, max_consec_failures=1):
@@ -1850,13 +1765,10 @@ def register_and_compress_data(n_clicks):
         current_dataset = MultipageTiffDataset(input_file)
 
         #Reshape U using order="F" here
-        U, R, s, V, std_img, mean_img, data_shape, data_order = localmd_decomposition(current_dataset, block_sizes, overlap, frames_to_init, max_components=max_components, background_rank = background_rank, sim_conf=sim_conf,\
-                                 frame_batch_size=frame_batch_size,pixel_batch_size=pixel_batch_size, dtype=dtype, order=order, \
-                                 num_workers=0, frame_corrector_obj = corrector, max_consec_failures=max_consec_failures)
-
-
-        
-            
+        U, R, s, V, std_img, mean_img, data_shape, data_order = localmd_decomposition(current_dataset, block_sizes, frames_to_init, \
+                                max_components=max_components, background_rank = background_rank, sim_conf=sim_conf,\
+                                 frame_batch_size=frame_batch_size,pixel_batch_size=pixel_batch_size, dtype=dtype, \
+                                 num_workers=0, frame_corrector_obj = corrector, max_consec_failures=max_consec_failures)     
         
         def save_decomposition(U, R, s, V, std_img, mean_img, data_shape, data_order, folder, order="F"):
             '''
@@ -1909,7 +1821,7 @@ def register_and_compress_data(n_clicks):
     write_params(os.path.join(outdir, "CompressionConfig.yaml"),
                 default=INPUT_PARAMS,
                 **params)
-    _ = perform_localmd_pipeline(input_file, block_sizes, overlap, frames_to_init, background_rank, \
+    _ = perform_localmd_pipeline(input_file, block_sizes, frames_to_init, background_rank, \
                           max_components, sim_conf, data_folder, frame_batch_size=frame_batch_size,pixel_batch_size=pixel_batch_size,\
                           batching=5, dtype="float32",  order="F", corrector = corrector, max_consec_failures=max_consec_failures)
     jax.clear_backends() 
@@ -2383,7 +2295,8 @@ def generate_superpixel_plot_secondpass(value, fig):
 ########
 
 @app.callback(
-    Output("download_demixing_results", "data"), Input("download_result_final", "n_clicks")
+    Output("download_demixing_results", "data"), Input("download_result_final", "n_clicks"),\
+    prevent_initial_call = True
 )
 def download_demix_results_button_click(n_clicks):
     
