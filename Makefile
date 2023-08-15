@@ -32,3 +32,9 @@ testlaunch:
 	echo "Go to localhost:8981 on server to access app"    
 	docker run -it -p 8981:8900 --gpus=all\
   		--mount type=bind,source=$(PROOT)/datasets/$(dataname),destination=/mounted_data/$(dataname) apasarkar/masknmf_full_pipeline
+        
+
+# Get basic shell access to docker image for development purposes only
+getshell:   
+	docker run -it -p 8981:8900 --gpus=all\
+  		--mount type=bind,source=$(PROOT)/datasets/$(dataname),destination=/mounted_data/$(dataname) apasarkar/masknmf_full_pipeline
