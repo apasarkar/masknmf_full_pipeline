@@ -56,6 +56,8 @@ import diskcache
 large_cache_size = 1073741824 * 15 ##15 Gigabyte Allocation
 cache = diskcache.Cache("./cache", size_limit = large_cache_size )
 
+generic_save_name = "RESULTS.npz"
+
 print("THE DEFAULT SIZE OF CACHE IS {}".format(cache.size_limit))
 background_callback_manager = DiskcacheManager(cache)
 
@@ -1603,12 +1605,13 @@ def register_and_compress_data(n_clicks):
         display("Motion correction completed.")
 
         # Save Frame-wise Shifts
-        display(f"Saving computed shifts to ({outdir})...")
-        np.savez(os.path.join(outdir, "shifts.npz"),
+        motion_save_folder = get_save_path(cache['save_folder'])
+        display(f"Saving computed shifts to ({motion_save_folder})...")
+        np.savez(motion_save_folder,
                  shifts_rig=corrector.shifts_rig,
                  x_shifts_els=corrector.x_shifts_els if pw_rigid else None,
                  y_shifts_els=corrector.y_shifts_els if pw_rigid else None)
-        display('Shifts saved as "shifts.npz".')
+        display('Shifts successfully saved.')
 
         corrector_obj.batching=10 ##Long term need to avoid this...
         return corrector_obj, target_file
@@ -1650,9 +1653,6 @@ def register_and_compress_data(n_clicks):
     ##
     ##
     ##########
-  
-    #NOTE: this data folder will also contain the location of the TestData
-    data_folder = cache['save_folder'] 
 
     pmd_params_dict = cache['pmd_params']
             
@@ -1756,7 +1756,7 @@ def register_and_compress_data(n_clicks):
 
     def perform_localmd_pipeline(input_file, block_sizes, frames_to_init, background_rank, \
                             max_components, sim_conf, \
-                             folder, frame_batch_size = 100, pixel_batch_size=100,\
+                            frame_batch_size = 100, pixel_batch_size=100,\
                             batching=5, dtype="float32",  order="F", corrector = None, max_consec_failures=1):
 
         from localmd.decomposition import localmd_decomposition, display
@@ -1770,12 +1770,11 @@ def register_and_compress_data(n_clicks):
                                  frame_batch_size=frame_batch_size,pixel_batch_size=pixel_batch_size, dtype=dtype, \
                                  num_workers=0, frame_corrector_obj = corrector, max_consec_failures=max_consec_failures)     
         
-        def save_decomposition(U, R, s, V, std_img, mean_img, data_shape, data_order, folder, order="F"):
+        def save_decomposition(U, R, s, V, std_img, mean_img, data_shape, data_order, order="F"):
             '''
             Write results to temporary location 
             '''
-            file_name = "decomposition.npz"
-            final_path = os.path.join(folder, file_name)
+            final_path = get_save_path(cache['save_folder'])
 
             #Write to cache for quick access
             cache['U'] = U
@@ -1797,23 +1796,16 @@ def register_and_compress_data(n_clicks):
                 device = 'cpu'
             cache['PMD_object'] = PMDVideo(U.tocsr(), R, s, V, data_shape, data_order=data_order, device=device)
             
-            np.savez(final_path, fov_shape = data_shape[:2], \
-                fov_order=data_order, U_data = U.data, \
-                U_indices = U.indices,\
-                U_indptr=U.indptr, \
-                U_shape = U.shape, \
-                U_format = type(U), \
-                R = R, \
-                s = s, \
-                Vt = V, \
-                 mean_img = mean_img, \
-                 noise_var_img = std_img)
-
-            display("the decomposition.npz file is saved at {}".format(folder))
+            save_dictionary = {'fov_shape':data_shape[:2], 'fov_order':data_order, 'U_data': U.data, \
+                               'U_indices':U.indices, 'U_indptr':U.indptr, 'U_shape':U.shape, 'U_format':type(U), \
+                               'R':R, 's':s, 'Vt':V, 'mean_img':mean_img, 'noise_var_img':std_img}
+            
+            update_npz_fields(final_path, save_dictionary)
+            display("the file at {} has been updated with the PMD decomposition results".format(final_path))
 
 
         ##Step 2i: Save the results: 
-        save_decomposition(U.tocsr(), R, s, V, std_img, mean_img, data_shape, data_order, folder, order=order)
+        save_decomposition(U.tocsr(), R, s, V, std_img, mean_img, data_shape, data_order, order=order)
         
     import jax
     jax.clear_backends()
@@ -1822,11 +1814,9 @@ def register_and_compress_data(n_clicks):
                 default=INPUT_PARAMS,
                 **params)
     _ = perform_localmd_pipeline(input_file, block_sizes, frames_to_init, background_rank, \
-                          max_components, sim_conf, data_folder, frame_batch_size=frame_batch_size,pixel_batch_size=pixel_batch_size,\
+                          max_components, sim_conf, frame_batch_size=frame_batch_size,pixel_batch_size=pixel_batch_size,\
                           batching=5, dtype="float32",  order="F", corrector = corrector, max_consec_failures=max_consec_failures)
     jax.clear_backends() 
-
-    downloaded_data_file = os.path.join(cache['save_folder'], "decomposition.npz")
     return None, 0, dash.no_update, " ", cache['shape'][2] 
 
         
@@ -2120,7 +2110,7 @@ def demix_data(n_clicks, n_clickssecondpass):
         with torch.no_grad():
             a, c, b, W, res, corr_img_all_r, num_list = superpixel_analysis_ring.update_AC_bg_l2_Y_ring_lowrank(my_pmd_object, maxiter, corr_th_fix, corr_th_fix_sec, corr_th_del, switch_point, skips, merge_corr_thr, merge_overlap_thr, ring_radius, denoise=denoise, plot_en=plot_en, plot_debug=plot_debug, update_after=update_after)
             W_final = W.create_complete_ring_matrix(a)
-            fin_rlt = {'U_sparse': my_pmd_object.U_sparse.cpu().to_scipy().tocsr(), 'R': my_pmd_object.R.cpu().numpy(), 'V': my_pmd_object.V.cpu().numpy(), 'a':a, 'c':c, 'b':b, "W":W_final, 'res':res, 'corr_img_all_r':corr_img_all_r, 'num_list':num_list, 'data_order': my_pmd_object.data_order, 'data_shape':my_pmd_object.shape};
+            fin_rlt = {'a':a, 'c':c, 'b':b, "W":W_final, 'res':res, 'corr_img_all_r':corr_img_all_r, 'num_list':num_list, 'data_order': my_pmd_object.data_order, 'data_shape':my_pmd_object.shape};
             
         cache['PMD_object'] = my_pmd_object
             
@@ -2128,8 +2118,9 @@ def demix_data(n_clicks, n_clickssecondpass):
         fin_rlt['data_shape'] = cache['shape']
         fin_rlt['data_order'] = cache['order']
 
-        save_path = os.path.join(cache['save_folder'], "demixingresults.npz")
-        np.savez(save_path, final_results = fin_rlt)
+        save_path = os.path.join(cache['save_folder'], generic_save_name)
+        update_npz_fields(save_path, fin_rlt)
+        display("The {} folder was updated with the newest demixing results".format(generic_save_name))
         cache['demixing_results'] = fin_rlt
 
         if button_clicked == "button_id_demix.n_clicks":
@@ -2288,7 +2279,9 @@ def generate_superpixel_plot_secondpass(value, fig):
         cache['localnmf_params'] = lnmf_params
         return curr_fig
      
-        
+       
+    
+
         
 ########
 ### Download results callbacks
@@ -2299,21 +2292,17 @@ def generate_superpixel_plot_secondpass(value, fig):
     prevent_initial_call = True
 )
 def download_demix_results_button_click(n_clicks):
-    
     if cache['save_folder'] is not None:
-        save_path =  os.path.join(cache['save_folder'], "demixingresults.npz")
-        if os.path.exists(save_path) and cache['PMD_object'] is not None and cache['PMD_object'].a is not None:
-            #These two conditions verify that (1) Demixing results actually exist and furthermore, we aren't saving older results 
+        save_path = get_save_path(cache['save_folder'])
+        display("We want to download the demixing results, here is what save path is {}".format(save_path))
+        if os.path.exists(save_path):
             return dcc.send_file(save_path)
         else:
             return dash.no_update
-    
     else:
         return dash.no_update
 
   
-
-
 
 @app.callback(
     Output("download_demixing_video_comp", "data"), Input("download_demixing_video", "n_clicks"),\
@@ -2321,26 +2310,40 @@ def download_demix_results_button_click(n_clicks):
 )
 def download_demix_video_button_click(n_clicks):
     if cache['save_folder'] is not None:
-        save_path =  os.path.join(cache['save_folder'], "demixingresults.npz")
-        if os.path.exists(save_path) and cache['PMD_object'] is not None and cache['PMD_object'].a is not None:
-            fin_rlt_file = np.load(save_path, allow_pickle=True)
-            fin_rlt = fin_rlt_file['final_results'].item()
+        save_path  = get_save_path(cache['save_folder'])
+        if os.path.exists(save_path) and cache['demixing_results'] is not None:
+            # fin_rlt_file = np.load(save_path, allow_pickle=True)
+            # fin_rlt = fin_rlt_file['final_results'].item()
+            fin_rlt = cache['demixing_results']
             start_frame = 400
             end_frame = min(cache['PMD_object'].shape[2], start_frame + 400)
             dim1_range = [0, cache['PMD_object'].shape[0]]
             dim2_range = [0, cache['PMD_object'].shape[1]]
             filename = "demixing_video"
-            # print(os.getcwd())
             standard_demix_vid_m(fin_rlt, start_frame, end_frame, dim1_range, dim2_range, filename=filename)
-            # print(os.path.exists(filename+".mp4"))
             return dcc.send_file(filename+".mp4")
         else:
             return dash.no_update
     
     else:
         return dash.no_update
-        
-            
+
+   
+def get_save_path(save_folder):
+    return str(os.path.join(save_folder, generic_save_name))
+
+def update_npz_fields(file_path, fields_data_dict):
+    '''
+    Utility function used to 
+    '''
+    try:
+        existing_data = np.load(file_path, allow_pickle=True)
+        updated_data = dict(existing_data)
+        updated_data.update(fields_data_dict)
+    except FileNotFoundError:
+        updated_data = fields_data_dict
+
+    np.savez(file_path, **updated_data)
         
         
 if __name__ == '__main__':
