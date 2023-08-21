@@ -1,12 +1,12 @@
 ## Build Container:
 
 # Start From Base OS
-ARG UBUNTU_VERSION=22.04
+ARG UBUNTU_VERSION=20.04
 # ARG OS=ubuntu2204
 # ARG cudnn_version=8.6.0.*
 # ARG cuda_version=cuda11.8
 
-ARG dockername=nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04
+ARG dockername=nvidia/cuda:11.8.0-runtime-ubuntu20.04
 FROM ${dockername} AS build
 # LABEL build=true
 SHELL ["/bin/bash", "-c"]
@@ -22,7 +22,6 @@ RUN xargs -a pkglist-build apt-get install -y --no-install-recommends \
     && chmod +x ./miniconda.sh \
     && ./miniconda.sh -b -p /opt/conda \
     && /opt/conda/bin/conda update conda \
-    && /opt/conda/bin/conda install -c conda-forge mamba \
     && /opt/conda/bin/conda init bash 
     
 
@@ -32,11 +31,11 @@ ENV PATH=opt/conda/bin:$PATH
 RUN conda create -n env python=3.9
 
 SHELL ["conda", "run", "-n", "env", "/bin/bash", "-c"]
-RUN conda install pytorch=1.11 torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
+RUN conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 RUN conda install pip
 RUN conda install pytorch-sparse -c pyg
 RUN conda install tqdm scipy pyyaml jupyterlab pillow Cython boto3 -c defaults -c anaconda
-RUN pip install --upgrade "jax[cuda11_local]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+RUN pip install "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 RUN pip install jaxopt torchnmf line-profiler pynwb "dash[diskcache]" dash-extensions Flask-Caching dash-bootstrap-components dash_daq dash-bootstrap-templates git+https://github.com/apasarkar/jnormcorre.git@main git+https://github.com/apasarkar/localmd.git@main git+https://github.com/j-friedrich/OASIS.git@f3ae85e1225bfa4bfe098a3f119246ac1e4f8481#egg=oasis git+https://github.com/apasarkar/masknmf.git@deconv_jax git+https://github.com/apasarkar/rlocalnmf.git@remove_nonneg ipywidgets git+https://github.com/crahan/ipyfilechooser.git opencv-python git+https://github.com/facebookresearch/detectron2.git
 # RUN /opt/conda/bin/conda clean --all --yes \
 #     && apt-get -y remove wget ca-certificates gnupg \
