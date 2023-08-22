@@ -22,16 +22,18 @@ publish:
 
 # Test Docker Image
 launch: fetch
-	@echo "Go to localhost:8981 on server to access app"    
+	$(info Go to localhost:8981 on server to access app)
+	$(info The data being analyzed is located at $(dataname) on the computer)
 	@docker run -it -p 8981:8900 --gpus=all\
-  		--mount type=bind,source=$(PROOT)/datasets/$(dataname),destination=/mounted_data/$(dataname) apasarkar/masknmf_full_pipeline
+  		--mount type=bind,source=$(dataname),destination=/mounted_data/$(notdir $(dataname)) apasarkar/masknmf_full_pipeline
         
         
 # Test Docker Image
 testlaunch:
-	echo "Go to localhost:8981 on server to access app"    
-	docker run -it -p 8981:8900 --gpus=all\
-  		--mount type=bind,source=$(PROOT)/datasets/$(dataname),destination=/mounted_data/$(dataname) apasarkar/masknmf_full_pipeline
+	$(info Go to localhost:8981 on server to access app)
+	$(info The data being analyzed is located at $(dataname) on the computer)
+	@docker run -it -p 8981:8900 --gpus=all\
+  		--mount type=bind,source=$(dataname),destination=/mounted_data/$(notdir $(dataname)) apasarkar/masknmf_full_pipeline
         
 
 # Get basic shell access to docker image for development purposes only
