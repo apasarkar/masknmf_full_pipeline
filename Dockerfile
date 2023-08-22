@@ -33,7 +33,7 @@ RUN conda create -n env python=3.9
 SHELL ["conda", "run", "-n", "env", "/bin/bash", "-c"]
 RUN conda install pip
 RUN conda install tqdm scipy pyyaml jupyterlab pillow Cython boto3 -c defaults -c anaconda
-RUN pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+RUN pip install jax==0.4.2 https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.4.2+cuda11.cudnn82-cp39-cp39-manylinux2014_x86_64.whl
 RUN pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
 RUN pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-1.13.0+cu117.html
 ##KEY: The below lines are ideal, but there's a bug with the distribution of Torch 2 right now, we can start using it once the bug is fixed
@@ -44,6 +44,7 @@ RUN pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-1.1
 # RUN pip install "jax[cuda11_cudnn86]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 # RUN pip install jax==0.4.7 -f https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.4.7+cuda11.cudnn82-cp39-cp39-manylinux2014_x86_64.whl
 RUN pip install jaxopt torchnmf line-profiler pynwb "dash[diskcache]" dash-extensions Flask-Caching dash-bootstrap-components dash_daq dash-bootstrap-templates git+https://github.com/apasarkar/jnormcorre.git@main git+https://github.com/apasarkar/localmd.git@main git+https://github.com/j-friedrich/OASIS.git@f3ae85e1225bfa4bfe098a3f119246ac1e4f8481#egg=oasis git+https://github.com/apasarkar/masknmf.git@deconv_jax git+https://github.com/apasarkar/rlocalnmf.git@remove_nonneg ipywidgets git+https://github.com/crahan/ipyfilechooser.git opencv-python git+https://github.com/facebookresearch/detectron2.git
+RUN conda install -c "nvidia/label/cuda-11.7.1" cuda-nvcc
 
 
 SHELL ["/opt/conda/bin/conda", "run", "-n", "base", "/bin/bash", "-c"]
