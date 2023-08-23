@@ -553,12 +553,12 @@ app.layout = html.Div(
                     id='example-graph',
                     figure=fig_mc_pmd_plots
                 ),\
+                dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='mouseup',step=1,\
+                             value=np.argmin(np.abs(100-1))),\
                 dcc.Graph(
                     id='trace_vis',
                     figure=fig_trace_vis
-                ),\
-                dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='mouseup',step=1,\
-                             value=np.argmin(np.abs(100-1)))
+                ) 
             ], width = 9),\
         ],\
         align="center"
