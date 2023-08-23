@@ -45,7 +45,7 @@ RUN pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-1.1
 # RUN pip install jax==0.4.7 -f https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.4.7+cuda11.cudnn82-cp39-cp39-manylinux2014_x86_64.whl
 RUN pip install jaxopt line-profiler pynwb "dash[diskcache]" dash-extensions Flask-Caching dash-bootstrap-components dash_daq dash-bootstrap-templates git+https://github.com/j-friedrich/OASIS.git@f3ae85e1225bfa4bfe098a3f119246ac1e4f8481#egg=oasis opencv-python 
 RUN conda install -c "nvidia/label/cuda-11.7.1" cuda-nvcc
-RUN pip install git+https://github.com/apasarkar/jnormcorre.git@main git+https://github.com/apasarkar/localmd.git@main git+https://github.com/apasarkar/masknmf.git@deconv_jax git+https://github.com/apasarkar/rlocalnmf.git@remove_nonneg git+https://github.com/facebookresearch/detectron2.git
+RUN pip install git+https://github.com/apasarkar/jnormcorre.git@main git+https://github.com/apasarkar/localmd.git@main git+https://github.com/apasarkar/masknmf.git@deconv_jax git+https://github.com/apasarkar/rlocalnmf.git@main git+https://github.com/facebookresearch/detectron2.git
 
 
 SHELL ["/opt/conda/bin/conda", "run", "-n", "base", "/bin/bash", "-c"]
