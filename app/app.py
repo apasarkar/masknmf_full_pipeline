@@ -214,7 +214,7 @@ cache['margin'] = current_margin
 cache['default_figsize'] = default_figsize
 pixel_plot = np.zeros(default_figsize)
 fig_local_corr = px.imshow(pixel_plot)
-fig_local_corr.update_layout(title_text="Noise Variance Image: No Results Yet", title_x=0.5, margin=current_margin)
+fig_local_corr.update_layout(title_text="Mean Image: No Results Yet", title_x=0.5, margin=current_margin)
 fig_local_corr.update_coloraxes(showscale=False)
 fig_local_corr.update(layout_coloraxis_showscale=False)
 fig_local_corr.update_xaxes(showticklabels=False)
@@ -917,9 +917,9 @@ def update_single_pixel_corr_plot(clickData, local_corr_fig):
 )
 def compute_local_corr_values_and_set_superpixel_value(curr_fig, value):
     if cache['PMD_flag']:
-        var_img = cache['noise_var_img']
+        var_img = cache['mean_img']
         curr_fig = px.imshow(var_img.squeeze())
-        curr_fig.update_layout(title_text = "Noise Variance Image".format(value),title_x=0.5, margin=cache['margin'])
+        curr_fig.update_layout(title_text = "Mean Image".format(value),title_x=0.5, margin=cache['margin'])
         curr_fig.update_xaxes(showticklabels=False)
         curr_fig.update_yaxes(showticklabels=False)
         curr_fig.update_coloraxes(showscale=False)
@@ -1076,8 +1076,8 @@ def update_motion_image(value):
         for i in range(num_imgs - 1):
             curr_fig['data'][i]['z'] = used_data[i]
         if value == 0:
-            curr_fig['data'][num_imgs-1]['z'] = cache['noise_var_img']
-        img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-compressed Frame {}".format(value+1), "Noise Variance Image Frame {}".format(value+1)]
+            curr_fig['data'][num_imgs-1]['z'] = cache['mean_img']
+        img_name_list = ["Raw Frame {}".format(value+1), "Registered + PMD-compressed Frame {}".format(value+1), "Mean Image"]
         for i, name in enumerate(img_name_list):
             curr_fig['layout']['annotations'][i]['text'] = img_name_list[i]
 
@@ -1911,7 +1911,7 @@ def dense_init_pipeline():
 
     
     
-
+###TODO: Code cleanup here 
 def run_masknmf(data_folder, confidence, allowed_overlap, cpu_only,\
                 block_dims_x, block_dims_y, frame_len, spatial_thresholds):
 
@@ -2016,7 +2016,7 @@ def run_masknmf(data_folder, confidence, allowed_overlap, cpu_only,\
     # Run Detection On Select Frames
     print("Performing MaskRCNN detection...")
     bin_masks, footprints, properties, _ = segment_local_UV(
-      U_sparse,
+      U_sparse.astype("float32"),
       mixing_weights,
       temporal_components,
       tuple((d1, d2, temporal_components.shape[-1])),
