@@ -1034,7 +1034,7 @@ def click(clickData):
         temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
         desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
         
-        trace = cache['PMD_object'].get_PMD_row(desired_index).cpu().numpy().flatten()
+        trace = cache['PMD_object'].get_PMD_row(desired_index, rescale=True).cpu().numpy().flatten()
         trace = pd.DataFrame(trace, columns = ['X'])
         fig_trace_vis = px.line(trace, y="X", 
                        labels={
@@ -1057,7 +1057,8 @@ def load_mc_frame(index):
 
 def get_PMD_frame(index):
     my_pmd_object = cache['PMD_object']
-    return my_pmd_object.get_PMD_frame(index).cpu().numpy()
+    frame = my_pmd_object.get_PMD_frame(index, rescale=True)
+    return frame.cpu().numpy()
         
     
 @app.callback(Output('example-graph', 'figure'), Input("pmd_mc_slider", "value"))
@@ -1794,7 +1795,7 @@ def register_and_compress_data(n_clicks):
                 device='cuda'
             else:
                 device = 'cpu'
-            cache['PMD_object'] = PMDVideo(U.tocsr(), R, s, V, data_shape, data_order=data_order, device=device)
+            cache['PMD_object'] = PMDVideo(U.tocsr(), R, s, V, data_shape, mean_img, std_img, data_order=data_order, device=device)
             
             save_dictionary = {'fov_shape':data_shape[:2], 'fov_order':data_order, 'U_data': U.data, \
                                'U_indices':U.indices, 'U_indptr':U.indptr, 'U_shape':U.shape, 'U_format':type(U), \
