@@ -24,7 +24,7 @@ publish:
 launch: fetch
 	$(info Go to localhost:8981 on server to access app)
 	$(info The data being analyzed is located at $(dataname) on the computer)
-	@docker run -it -p 8981:8900 --gpus=all\
+	@docker run -i -p 8981:8900 --gpus=all\
   		--mount type=bind,source=$(dataname),destination=/mounted_data/$(notdir $(dataname)) apasarkar/masknmf_full_pipeline
         
         
@@ -32,7 +32,7 @@ launch: fetch
 testlaunch:
 	$(info Go to localhost:8981 on server to access app)
 	$(info The data being analyzed is located at $(dataname) on the computer)
-	@docker run -it -p 8981:8900 --gpus=all\
+	@docker run -i -p 8981:8900 --gpus=all\
   		--mount type=bind,source=$(dataname),destination=/mounted_data/$(notdir $(dataname)) apasarkar/masknmf_full_pipeline
         
 
