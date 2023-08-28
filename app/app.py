@@ -37,6 +37,8 @@ import torch
 import localnmf 
 import math
 import jax
+from skimage import data, draw
+from scipy import ndimage
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".70"
 # jax.config.update('jax_platform_name', 'cpu')
@@ -533,6 +535,22 @@ sidebar_results =  html.Div(
     style=SIDEBAR_STYLE,
 )
 
+
+#####
+## Annotation configurations
+#####
+
+config_pmd_mc_plots = {
+    "modeBarButtonsToAdd": [
+        # "drawline",
+        # "drawopenpath",
+        "drawclosedpath",
+        # "drawcircle",
+        # "drawrect",
+        "eraseshape",
+    ]
+}
+
 #####
 ## App Layout
 #####
@@ -551,7 +569,8 @@ app.layout = html.Div(
             [
                 dcc.Graph(
                     id='example-graph',
-                    figure=fig_mc_pmd_plots
+                    figure=fig_mc_pmd_plots,\
+                    config=config_pmd_mc_plots
                 ),\
                 dash.dcc.Slider(id='pmd_mc_slider',min=0,max=100,marks=None,updatemode='mouseup',step=1,\
                              value=np.argmin(np.abs(100-1))),\
@@ -1014,8 +1033,31 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
         return dash.no_update
     
 
+    
 
-### CALLBACKS for point-based clicking
+### CALLBACKS for point-based clicking and trace generation
+
+def path_to_indices(path):
+    """From SVG path to numpy array of coordinates, each row being a (row, col) point
+    """
+    indices_str = [
+        el.replace("M", "").replace("Z", "").split(",") for el in path.split("L")
+    ]
+    return np.rint(np.array(indices_str, dtype=float)).astype(np.int)
+
+def path_to_mask(path, shape):
+    """From SVG path to a boolean array where all pixels enclosed by the path
+    are True, and the other pixels are False.
+    
+    Note: right now this is just for closed paths (no other functionality is provided here)
+    """
+    cols, rows = path_to_indices(path).T
+    rr, cc = draw.polygon(rows, cols)
+    mask = np.zeros(shape, dtype=bool)
+    mask[rr, cc] = True
+    mask = ndimage.binary_fill_holes(mask)
+    return mask
+
 
 def get_points(clickData):
     if not clickData:
@@ -1026,27 +1068,58 @@ def get_points(clickData):
 @app.callback(
     Output("trace_vis", "figure"),
     Input("example-graph", "clickData"),
+    Input("example-graph", "relayoutData"),
+    prevent_initial_call=True
 )
-def click(clickData):
-    x, y = get_points(clickData)
-    if cache['PMD_object'] is not None:
-        temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
-        temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
-        desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
-        
-        trace = cache['PMD_object'].get_PMD_row(desired_index, rescale=True).cpu().numpy().flatten()
-        trace = pd.DataFrame(trace, columns = ['X'])
-        fig_trace_vis = px.line(trace, y="X", 
-                       labels={
-                     "index": "Frame Number",
-                     "X": "A.U.",
-                 },)
-        fig_trace_vis.update_layout(title_text="PMD Trace of pixel height = {} width = {}".format(y, x), title_x=0.5)
-        
-        return fig_trace_vis
+def click(clickData, relayout_data):
+    callback_info = list(ctx.triggered_prop_ids.keys())[0]
+    if callback_info == "example-graph.relayoutData" and "shapes" in relayout_data.keys():
+        if len(relayout_data['shapes']) > 0: #There is at least one shape
+            last_shape = relayout_data["shapes"][-1]
+            mask = path_to_mask(last_shape["path"], cache['shape'][:2])
+            rr, cc = mask.nonzero()
 
-    else:
-        return dash.no_update
+            if cache['order'] == "F":
+                indices = cc * cache['shape'][0] + rr
+            elif cache['order'] == "C":
+                indices = rr * cache['shape'][1] + cc
+            else:
+                raise ValueError("shape is not correctly specified here")
+
+            U_crop = cache['U'][indices, :]
+            normalizer = len(indices)
+            U_flat = U_crop.T.dot((np.ones((1, len(indices)))/normalizer).T).T
+
+            UfR = U_flat.dot(cache['R']) #Note that cache['R'] here is Rs from the URsV decomp
+            UfRV = UfR.dot(cache['V'])
+            trace = pd.DataFrame(UfRV.flatten(), columns = ['X'])
+
+            fig_trace_vis = px.line(trace, y="X", 
+                               labels={
+                             "index": "Frame Number",
+                             "X": "A.U.",
+                         },)
+            fig_trace_vis.update_layout(title_text="ROI Average Trace from most recently draw shape", title_x=0.5)
+            return fig_trace_vis
+    elif callback_info == "example-graph.clickData":
+        x, y = get_points(clickData)
+        if cache['PMD_object'] is not None:
+            temp_mat = np.arange(cache['shape'][0] * cache['shape'][1])
+            temp_mat = temp_mat.reshape((cache['shape'][0], cache['shape'][1]), order=cache['order'])
+            desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
+
+            trace = cache['PMD_object'].get_PMD_row(desired_index, rescale=True).cpu().numpy().flatten()
+            trace = pd.DataFrame(trace, columns = ['X'])
+            fig_trace_vis = px.line(trace, y="X", 
+                           labels={
+                         "index": "Frame Number",
+                         "X": "A.U.",
+                     },)
+            fig_trace_vis.update_layout(title_text="PMD Trace of pixel height = {} width = {}".format(y, x), title_x=0.5)
+
+            return fig_trace_vis
+    
+    return dash.no_update
 
 
 ### CALLBACKS FOR SCROLLBAR
