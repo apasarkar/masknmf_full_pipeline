@@ -88,6 +88,10 @@ cache['PMD_flag'] = False #Indicates whether PMD has been run or not
 cache['demix_flag'] = False #Indicates whether demixing has been run or not 
 cache['PMD_object'] = None
 
+
+cache['save_registered_data_flag'] = True #Indicates whether we save the results of the motion correction. 
+cache['target_raw_file_postmc'] = None #This is the field that contains the location of whatever the output is of MC.
+
 cache['register_run_flag'] = True #This flag will be modified if instead do not want to register the data
 
 
@@ -1043,7 +1047,7 @@ def path_to_indices(path):
     indices_str = [
         el.replace("M", "").replace("Z", "").split(",") for el in path.split("L")
     ]
-    return np.rint(np.array(indices_str, dtype=float)).astype(np.int)
+    return np.rint(np.array(indices_str, dtype=float)).astype(int)
 
 def path_to_mask(path, shape):
     """From SVG path to a boolean array where all pixels enclosed by the path
@@ -1073,11 +1077,15 @@ def get_points(clickData):
 )
 def click(clickData, relayout_data):
     callback_info = list(ctx.triggered_prop_ids.keys())[0]
+    if cache['PMD_object'] is None:
+        return dash.no_update
     if callback_info == "example-graph.relayoutData" and "shapes" in relayout_data.keys():
         if len(relayout_data['shapes']) > 0: #There is at least one shape
             last_shape = relayout_data["shapes"][-1]
             mask = path_to_mask(last_shape["path"], cache['shape'][:2])
             rr, cc = mask.nonzero()
+            
+            ##TODO: Add logic here to sample if the lasso is too big
 
             if cache['order'] == "F":
                 indices = cc * cache['shape'][0] + rr
@@ -1087,19 +1095,23 @@ def click(clickData, relayout_data):
                 raise ValueError("shape is not correctly specified here")
 
             U_crop = cache['U'][indices, :]
-            normalizer = len(indices)
-            U_flat = U_crop.T.dot((np.ones((1, len(indices)))/normalizer).T).T
-
-            UfR = U_flat.dot(cache['R']) #Note that cache['R'] here is Rs from the URsV decomp
-            UfRV = UfR.dot(cache['V'])
-            trace = pd.DataFrame(UfRV.flatten(), columns = ['X'])
-
-            fig_trace_vis = px.line(trace, y="X", 
-                               labels={
-                             "index": "Frame Number",
-                             "X": "A.U.",
-                         },)
-            fig_trace_vis.update_layout(title_text="ROI Average Trace from most recently draw shape", title_x=0.5)
+            UR = U_crop.dot(cache['R'])
+            trace = UR.dot(cache['V'])
+            trace *= cache['noise_var_img'].reshape((-1,), order=cache['order'])[indices][:, None]
+            trace += cache['mean_img'].reshape((-1,), order=cache['order'])[indices][:, None]
+            trace = np.sum(trace, axis = 0) / len(indices)
+            df_dict = {}
+            df_dict['PMD Trace'] = trace.flatten()
+            
+            #Add logic for generating the ROI averaged movie as well
+            if cache['target_raw_file_postmc'] is not None:
+                cropped_raw_data = np.array(cache['target_raw_file_postmc'][:, rr, cc])
+                pre_pmd_trace = np.mean(cropped_raw_data, axis=(1,))
+                df_dict["Before PMD"] = pre_pmd_trace
+            
+            df_traces = pd.DataFrame(data=df_dict)
+            fig_trace_vis = px.line(df_traces, x=df_traces.index, y=list(df_dict.keys()))
+            fig_trace_vis.update_layout(title_text="ROI Average Trace from most recently draw shape", title_x=0.5, showlegend=True)
             return fig_trace_vis
     elif callback_info == "example-graph.clickData":
         x, y = get_points(clickData)
@@ -1109,13 +1121,16 @@ def click(clickData, relayout_data):
             desired_index = temp_mat[y, x] ##Note y, x not x,y because the clickback returns the height as the second coordinate
 
             trace = cache['PMD_object'].get_PMD_row(desired_index, rescale=True).cpu().numpy().flatten()
-            trace = pd.DataFrame(trace, columns = ['X'])
-            fig_trace_vis = px.line(trace, y="X", 
-                           labels={
-                         "index": "Frame Number",
-                         "X": "A.U.",
-                     },)
-            fig_trace_vis.update_layout(title_text="PMD Trace of pixel height = {} width = {}".format(y, x), title_x=0.5)
+            df_dict = {}
+            df_dict['PMD Trace'] = trace.flatten()
+            
+            if cache['target_raw_file_postmc'] is not None:
+                pre_pmd_trace = cache['target_raw_file_postmc'][:, y, x]
+                df_dict['Before PMD'] = pre_pmd_trace
+            
+            df_traces = pd.DataFrame(data=df_dict)
+            fig_trace_vis = px.line(df_traces, x=df_traces.index, y=list(df_dict.keys()))
+            fig_trace_vis.update_layout(title_text="PMD Trace of pixel height = {} width = {}".format(y, x), title_x=0.5, showlegend=True)
 
             return fig_trace_vis
     
@@ -1339,6 +1354,7 @@ def register_and_compress_data(n_clicks):
         gSig_filt = None
 
     frames_per_split =  500
+    save_movie = cache['save_registered_data_flag']
 
     INPUT_PARAMS = {
         # Caiman Internal:
@@ -1353,7 +1369,7 @@ def register_and_compress_data(n_clicks):
                    'gSig_filt': gSig_filt,
                    'splits' : frames_per_split,
                    'sketch_template': True,
-                   'save_movie':False},
+                   'save_movie':save_movie},
     }
 
 
@@ -1611,7 +1627,7 @@ def register_and_compress_data(n_clicks):
         -------
         None :
         """
-
+        print("at the motion correction step, the save_movie value is {}".format(save_movie))
         from jnormcorre.utils.movies import load
         from jnormcorre import motion_correction
         import math
@@ -1702,16 +1718,21 @@ def register_and_compress_data(n_clicks):
                   default=INPUT_PARAMS,
                   **params)
 
-    # Run Single Pass Motion Correction
+    # Run Motion Correction
     try:
         if register:
             corrector, target = motion_correct(data_name, outdir, **params)
             data_name = target[0]
+            print("target0 is {}".format(target[0]))
+            if target[0] is not None:
+                cache['target_raw_file_postmc'] = tifffile.memmap(target[0])
             input_file = data_name
         else:
             corrector = None
             data_name = resolve_dataformats(data_name)[0]
             input_file = data_name
+            if input_file is not None:
+                cache['target_raw_file_postmc'] = tifffile.memmap(input_file)
             import jax
             jax.clear_backends()
     except Exception as e:
