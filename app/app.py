@@ -342,7 +342,7 @@ sidebar = html.Div(
         html.Br(),\
         html.Br(),\
         html.Br(),\
-        html.Br(),\
+        html.Br(id='register-save-dumboutput'),\
         html.Br(id='boolean-switch-dumboutput'),\
         html.Hr(),\
         html.H2("Step 2: Register, Compress, Denoise Data ", style={'textAlign': 'center'}),\
@@ -381,12 +381,28 @@ sidebar = html.Div(
                     ),\
                     # width = 3
                 ),\
+                
                 dbc.Col(
-                    dbc.Button(id="button_id", children="Run Job!"),\
-                    # width = 9
-                ),\
+                   daq.BooleanSwitch(
+                       on=True,
+                       label="Save Registration",
+                       labelPosition="top",
+                       id="save_register",
+                    ),\
+               ),\
             ],\
             justify="evenly",\
+        ),\
+        
+        dbc.Row(
+            [
+                dbc.Col(
+                    [
+                        dbc.Button(id="button_id", children="Run Job!", style={'verticalalign':'center'}),\
+                    ],\
+                    width={"size": 6, "offset": 4},\
+                ),\
+            ] ,\
         ),\
         
         html.Div(
@@ -1037,6 +1053,31 @@ def generate_superpixel_plot_firstpass(curr_fig, value, disabled_flag):
         return dash.no_update
     
 
+### Callback for controlling whether or not the registered movie is saved to disk
+@app.callback(
+    Output("save_register", "disabled"),\
+    Output("register-save-dumboutput", "children"),\
+    Input("save_register", "on"),\
+    Input("register_flag", "on"),\
+    prevent_initial_call=True
+)
+def toggle_registration_save(save_reg_mode, register_flag_mode):
+    reason = list(ctx.triggered_prop_ids.keys())[0]
+    if reason == "save_register.on":
+        print("save register, value is {}".format(save_reg_mode))
+        cache['save_registered_data_flag'] = save_reg_mode
+        return dash.no_update, dash.no_update
+    elif reason == "register_flag.on":
+        print("register flag {}".format(register_flag_mode))
+        if register_flag_mode:
+            #This means registration was turned on. So we need the existing save_reg_mode to match
+            cache['save_registered_data_flag'] = save_reg_mode
+            return False, dash.no_update
+        else:
+            #In this case, we disable the output
+            return True, dash.no_update
+    else:
+        return dash.no_update
     
 
 ### CALLBACKS for point-based clicking and trace generation
