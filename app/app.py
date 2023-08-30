@@ -932,11 +932,34 @@ def show_individual_signal(value):
         #Identify the regular trace of the neuron (this should also be reasonable)
         fig_img = px.imshow(a_crop / np.amax(a_crop), zmin=0, zmax=1)
         fig_img.update(layout_coloraxis_showscale=False)
+        fig_img.update_layout(title_text = "Signal {}".format(value), title_x=0.5)
+        
         df_dict = {"Temporal Trace":c_crop}
+        #Next, we will show the ROI averaged results
+        mask = a_crop > 0
+        rr, cc = mask.nonzero()
+
+        ##TODO: Add logic here to sample if the ROI is too big and computing the average crashes memory...
+
+        if data_order == "F":
+            indices = cc * data_shape[0] + rr
+        elif data_order == "C":
+            indices = rr * data_shape[1] + cc
+        else:
+            raise ValueError("shape is not correctly specified here")
+
+        U_crop = cache['U'][indices, :]
+        UR = U_crop.dot(cache['R'])
+        trace = UR.dot(cache['V'])
+        trace *= cache['noise_var_img'].reshape((-1,), order=data_order)[indices][:, None]
+        trace += cache['mean_img'].reshape((-1,), order=data_order)[indices][:, None]
+        trace = np.sum(trace, axis = 0) / len(indices)
+        
+        trace -= np.amin(trace)
+        df_dict['PMD ROI Average (No Demixing)'] = (trace / np.amax(trace)) * np.amax(c_crop)
         df_traces = pd.DataFrame(data=df_dict)
         fig_trace = px.line(df_traces, x=df_traces.index, y=list(df_dict.keys()))
         fig_trace.update_layout(title_text = "Temporal trace for signal {}".format(value),title_x=0.5)
-        fig_img.update_layout(title_text = "Signal {}".format(value), title_x=0.5)
 
         return fig_img, fig_trace
 
