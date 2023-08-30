@@ -269,9 +269,6 @@ fig_pixel_corr_secondpass.update_yaxes(showticklabels=False)
 fig_pixel_corr_secondpass.update_xaxes(showticklabels=False)
 
 
-
-
-
 pixel_plot = np.zeros(default_figsize)
 fig_superpixel_secondpass = px.imshow(pixel_plot)
 fig_superpixel_secondpass.update_coloraxes(showscale=False)
@@ -299,6 +296,22 @@ fig_post_demixing_pixewise_traces = px.line(trace, y="X",
                      "X": "A.U.",
                  },)
 fig_post_demixing_pixewise_traces.update_layout(title_text="Pixel-wise demixing: No Results Yet", title_x=0.5)
+
+pixel_plot = np.zeros(default_figsize)
+fig_individual_neuron_display = px.imshow(pixel_plot)
+fig_individual_neuron_display.update_layout(title_text = "No Signals Yet", title_x=0.5)
+fig_individual_neuron_display.update_coloraxes(showscale=False)
+fig_individual_neuron_display.update(layout_coloraxis_showscale=False)
+
+trace = np.zeros((200))
+indices = [i for i in range(1, trace.shape[0]+1)]
+trace = pd.DataFrame(trace, columns = ['X'], index = indices)
+fig_post_demixing_signal_traces = px.line(trace, y="X", 
+                       labels={
+                     "index": "Frame Number",
+                     "X": "A.U.",
+                 },)
+fig_post_demixing_signal_traces.update_layout(title_text="After running demixing, use scrollbar below to view individual signals here", title_x=0.5)
 
 
 
@@ -700,6 +713,45 @@ app.layout = html.Div(
         [
             dbc.Col(
                 [
+                    dcc.Graph(
+                        id='individual_neuron_display',
+                        figure=fig_individual_neuron_display
+                    ),\
+                    html.Div(id='placeholder_post_demixing_secondrow', children=""),\
+                ],\
+                width=5
+            ),\
+            
+            dbc.Col(
+                [
+                    dcc.Graph(
+                        id='individual_timecourse_display',
+                        figure=fig_post_demixing_signal_traces
+                    ),\
+                ],\
+                width=7
+            ),\
+            
+        ],\
+    align="center"
+    ),\
+    
+    dbc.Row(
+        [
+            dbc.Col(
+                [
+                    dash.dcc.Slider(id='neuron_demix_slider',min=1,max=100,marks=None,updatemode='mouseup',step=1,\
+                             value=np.argmin(np.abs(100-1))),\
+                ]
+            ),\
+        
+        ]
+    ),\
+     
+    dbc.Row(
+        [
+            dbc.Col(
+                [
                     html.Div([sidebar_results]),\
                 ],\
                 width=12
@@ -858,8 +910,58 @@ def plot_demixing_result(clickData):
             return dash.no_update
     else:
         return dash.no_update
+   
+
+#TR45
+
+
+@app.callback(
+    Output("individual_neuron_display", "figure"),
+    Output("individual_timecourse_display", "figure"),
+    Input("neuron_demix_slider", "value"),
+    prevent_initial_call = True
+)
+def show_individual_signal(value):
+    if cache['PMD_object'] is not None:
+        python_index = value - 1
+        fin_rlt = cache['demixing_results']
+        a, c, data_order, data_shape = fin_rlt['a'], fin_rlt['c'], fin_rlt['data_order'], fin_rlt['data_shape']
+        a_crop = a[:, python_index].reshape((data_shape[0], data_shape[1]), order=data_order)
+        c_crop = c[:, python_index].flatten() #The columns give the time series
+
+        #Identify the regular trace of the neuron (this should also be reasonable)
+        fig_img = px.imshow(a_crop / np.amax(a_crop), zmin=0, zmax=1)
+        fig_img.update(layout_coloraxis_showscale=False)
+        df_dict = {"Temporal Trace":c_crop}
+        df_traces = pd.DataFrame(data=df_dict)
+        fig_trace = px.line(df_traces, x=df_traces.index, y=list(df_dict.keys()))
+        fig_trace.update_layout(title_text = "Temporal trace for signal {}".format(value),title_x=0.5)
+        fig_img.update_layout(title_text = "Signal {}".format(value), title_x=0.5)
+
+        return fig_img, fig_trace
+
+    return dash.no_update
     
-    
+    #Next (ambitious) show what nonnegative ROI average with just the binary mask would do (un-center the data, take the mean
+
+@app.callback(
+    Output("neuron_demix_slider", "value"),
+    Output("neuron_demix_slider", "max"),
+    Input("placeholder_post_demixing", "children"),
+    prevent_initial_call = True
+)
+def update_postdemix_signal_scrollbar(fig):
+    #Check if there are actually signals
+    if cache['PMD_object'] is not None:
+        my_pmd_object = cache['PMD_object']
+        if my_pmd_object.a is not None and my_pmd_object.c is not None:
+            num_neurons = my_pmd_object.a.shape[1] 
+            print("the number of neurons identified in this new section of callback logic is {}".format(num_neurons))
+            
+            return 1, num_neurons
+        
+        
+    return dash.no_update, dash.no_update
     
 
 
