@@ -25,7 +25,6 @@ from localnmf.visualization import standard_demix_vid_m
 from localnmf import superpixel_analysis_ring
 from localnmf.pmd_video import PMDVideo
 from localnmf.pmd_video import local_correlation_mat, superpixel_init
-from localnmf_functions import get_single_pixel_corr_img
 from localnmf import superpixel_analysis_ring
 
 #Scientific computation imports
