@@ -1,0 +1,22 @@
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Sphinx build outputs
+docs/_build/
+
+# Some common file used in the development process
+*.npz
+*.mp4
+*.pth
+*.zip
+*.prof
+**__pycache__
+app/cache/
+cache/
+
+#ignore all datasets but keep the toy dataset available
+datasets/
+!datasets/demoMovie.tif
+
+
