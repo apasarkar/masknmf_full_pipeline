@@ -8,3 +8,4 @@ datasets/*
 *.zip
 *.git
 **/ipynb_checkpoints
+app/cache/*
