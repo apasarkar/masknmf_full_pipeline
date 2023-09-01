@@ -11,6 +11,9 @@ docs/_build/
 *.pth
 *.zip
 *.prof
+**__pycache__
+app/cache/
+cache/
 
 #ignore all datasets but keep the toy dataset available
 datasets/
