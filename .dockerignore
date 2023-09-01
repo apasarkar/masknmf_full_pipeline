@@ -6,3 +6,5 @@ datasets/*
 *.ipynb
 *.pth
 *.zip
+*.git
+**/ipynb_checkpoints
