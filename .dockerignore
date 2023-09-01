@@ -1,0 +1,8 @@
+datasets/*
+*.tif
+*.tiff
+*.npz
+*.mp4
+*.ipynb
+*.pth
+*.zip
