@@ -14,3 +14,10 @@ MaskNMF App Documentation
    app_use/Demixing
    app_use/Inspection
    app_use/PostProcessing
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`

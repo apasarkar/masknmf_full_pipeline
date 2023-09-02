@@ -14,6 +14,6 @@ Local Deployment
 Cloud Deployment
 ----------------
 
-We provide cloud support for running the maskNMF app via the Neurocaas platform. See https://neurocaas.com for more details. 
+We will provide this analysis pipeline on the cloud via the Neurocaas platform. See https://neurocaas.com for more details. 
 
 

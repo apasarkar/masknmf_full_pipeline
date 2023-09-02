@@ -1,6 +1,6 @@
 .. maskNMF inspection guide
 
-Inspecting the results after running demixing.
-==============================================
+Results Inspection
+==================
 
 Here we talk about how to inspect results.

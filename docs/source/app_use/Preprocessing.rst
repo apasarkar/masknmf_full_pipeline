@@ -1,6 +1,6 @@
 .. maskNMF pre-processing guide
 
-Inspect results used for pre-processing
-=======================================
+Registration and Compression
+============================
 
-Here we talk about the motion correction and registration/compression steps
+Here we talk about the motion correction and registration/compression steps.
