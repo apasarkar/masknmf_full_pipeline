@@ -7,6 +7,7 @@ This is a Dash app for GPU-accelerated interactive data analysis of functional n
 The app brings the following individual data analysis methods into one cohesive pipeline for fast interactive data analysis. 
 
 .. bulletlist:: Links
+
   * Accelerated NoRMCoRRE
     `https://github.com/apasarkar/jnormcorre`
   * Accelerated SVD-like data compression (PMD)
