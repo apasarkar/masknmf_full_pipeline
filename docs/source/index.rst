@@ -9,6 +9,7 @@ MaskNMF App Documentation
    :maxdepth: 2
    :caption: Contents:
 
+   app_use/Summary
    app_use/Installation   
    app_use/Preprocessing
    app_use/Demixing
