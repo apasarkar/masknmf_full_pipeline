@@ -10,19 +10,19 @@ The app is provided via a docker container for ease of use and reproducibility. 
 
 Step 0: There are some basic dependencies you will need on your linux machine: 
 
-.. bulletlist:: Links
-   * make (most Linux operating systems come with this, to check if you have it, run "make --version" on the terminal. Otherwise you will need to install it 
-   * docker
-   * nvidia-docker
-   * git
-   * GPU drivers supporting CUDA 11.* applications 
+.. bulletlist::
+  * make (most Linux operating systems come with this, to check if you have it, run "make --version" on the terminal. Otherwise you will need to install it 
+  * docker
+  * nvidia-docker
+  * git
+  * GPU drivers supporting CUDA 11.* applications 
    
 If using AWS, we recommend you launch from a linux AMI that (a) supports GPU use and (b) already has these basic dependencies. A great example is the NVIDIA GPU-Optimized AMI.
 Step 1: Clone the repo. Get the masknmf app repository onto the computer: 
 
-.. code-block:: bash
-    cd
-    git clone https://github.com/apasarkar/masknmf_full_pipeline.git
+.. code-block::
+  cd
+  git clone https://github.com/apasarkar/masknmf_full_pipeline.git
 
 Step 2: Upload the relevant dataset to the computer.
 
@@ -30,16 +30,16 @@ If you have local access, you can do this step physically (for example, by using
 
 If you have remote access, you can do the following on the command line: 
 
-.. code-block:: bash
-    scp <Local_Path_To_Dataset> <Server_IP_Address>:<Some_Location_On_Server>
+.. code-block::
+  scp <Local_Path_To_Dataset> <Server_IP_Address>:<Some_Location_On_Server>
 
 Step 3: Launch the app on the remote instance
 You need to do the following: 
 
-.. code-block:: bash
-    cd
-    cd masknmf_full_pipeline
-    make launch dataname=<Absolute_Path_To_Your_Dataset>
+.. code-block::
+  cd
+  cd masknmf_full_pipeline
+  make launch dataname=<Absolute_Path_To_Your_Dataset>
 
 Step 4: Connect your local computer to the server to view/control the app.
 
@@ -47,8 +47,8 @@ If you have local access, you can skip this step entirely.
 
 If you have remote access, note that he maskNMF app is currently exposed via port 8981 on the linux server whenever it is launched. So you need to set up port forwarding from your personal computer to port 8981 on the linux server. To do this, run the following on the linux command line: 
 
-.. code-block:: bash
-    ssh -N -f -L localhost:2003:localhost:8981 <Server IP Address>
+.. code-block::
+  ssh -N -f -L localhost:2003:localhost:8981 <Server IP Address>
 
 where <Server IP Address> is the IP address of the server.
 
