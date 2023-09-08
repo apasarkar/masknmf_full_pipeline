@@ -10,7 +10,9 @@ In this section, we focus on the steps to preprocess data in the maskNMF app. Se
 
 The first step is to select the file to analyze. If you are launching this app through the official docker container, that means you really selected the data when you launched the app - in this case, the dataset will be found in the "mounted_data" folder. You can use the file selection bar (under "Step 1") to browse through the app filesystem and select it.
 
-We now discuss the three ways you can use these preprocessing tools. In all cases, PMD Compression will be run. For PMD, there are two parameters to select: the "X" and "Y" block dimensions. At a high level, the PMD algorithms partitions the imaging FOV into overlapping blocks, runs a variant of truncatetd singular value decomposition on each block of the data, and then collates the results. The block dimensions should be at least (20, 20) and at most (100, 100). Each block should be large enough to cover a single neural signal (for example, a soma). However, before the compression is run, there are options to register the data as well.
+PMD Compression is an essential preprocessing step in our pipeline, allowing for faster data analysis and conservative noise reduction. For PMD, there are two parameters to select: a block height and a block width. At a high level, the PMD algorithms partitions the imaging FOV into overlapping blocks, runs a variant of truncatetd singular value decomposition on each block of the data, and then collates the results. As a general rule of thumb, the block dimensions should be at least (20, 20) and at most (50, 50). Each block should be large enough to cover a single neural signal (for example, a soma). Note that the default values in the picture above are (20, 20). 
+
+Before running compression, however, you need to specify whether to run motion correction and whether to save out the motion corrected movie. There are three approaches to doing this: 
 
 **Approach 1**: You run motion correction, save results, then run PMD Compression
 Here you register the data and guarantee that the results are explicitly saved out as another tiff file. Doing so will allow you to visualize motion corrected traces of the data and compare them to the traces of the data after the PMD compression step. 
@@ -21,8 +23,12 @@ Here you register the data and guarantee that the results are explicitly saved o
 
 Here is how the results will look after you have run all of these steps: 
 
-<image>
+.. image:: ../images/Preprocessing_MaskNMF_Results.png
+   :width: 600
 
-First note that you can use the closed-loop selection annotation tools to look at ROI-averaged traces in the PMD movie (and motion corrected/raw movie, where applicable). Otherwise you can also click individual pixels of this data to look at the corresponding traces. 
+The app provides a lot of functionality for convenient viewing: you can zoom in and out of any of the images, you can use the scroll bar to scroll through frames of the individual movie (more on this below), and you can do the same kinds of things for the temporal traces. Note in the "Registered and Compresed PMD Frame" panel, there is a black drawing over the prominent cell. The Dash app allows for manual ROI selection; upon drawing an ROI, the ROI averaged PMD and/or raw traces will be generated. This can be useful for quickly examining the quality of a dataset before doing further analysis. You can also do this at the single-pixel level; by selecting the "zoom" feature (see below) and clicking a pixel, the app will automatically show you the PMD and (if applicable) raw traces of the data. In general, by hovering your cursor over all the figures, you can see the different ways in which you can interact with the figure (zooming in/out, annotations, and more). See the below image for an illustration: 
 
-You can also use the scroll bar to look at individual frames of the raw/motion corrected and PMD compressed video. In general, the Dash app is meant to function as a Dashboard for kicking off jobs and creating lightweight visualizations, so you won't get high-framerate playback of these videos on the app. For this purpose, we have built a napari plugin to allow you to do this with the massively compressed data on your personal computer. 
+.. image:: ../images/Preprocessing_MaskNMF_ROIAvg.png
+   :width: 600
+
+One functionality that will typically be slower in the Dash app is video rendering. In general, the Dash app is meant to function as a Dashboard for kicking off jobs and creating lightweight visualizations, so you won't get high-framerate playback of these videos on the app. To view various imaging videos (and the PMD compression and demixing results in the following sections), we have built a napari plugin to allow you to do this with the massively compressed data on your personal computer.

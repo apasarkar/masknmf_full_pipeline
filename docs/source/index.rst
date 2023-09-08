@@ -13,7 +13,6 @@ MaskNMF App Documentation
    app_use/Installation   
    app_use/Preprocessing
    app_use/Demixing
-   app_use/Inspection
    app_use/PostProcessing
 
 Indices and tables

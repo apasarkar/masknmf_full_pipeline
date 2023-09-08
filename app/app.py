@@ -1276,7 +1276,7 @@ def click(clickData, relayout_data):
             
             df_traces = pd.DataFrame(data=df_dict)
             fig_trace_vis = px.line(df_traces, x=df_traces.index, y=list(df_dict.keys()))
-            fig_trace_vis.update_layout(title_text="ROI Average Trace from most recently draw shape", title_x=0.5, showlegend=True)
+            fig_trace_vis.update_layout(title_text="ROI Average Trace from most recently drawn shape", title_x=0.5, showlegend=True)
             return fig_trace_vis
     elif callback_info == "example-graph.clickData":
         x, y = get_points(clickData)
