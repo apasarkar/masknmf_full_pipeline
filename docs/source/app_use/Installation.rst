@@ -8,7 +8,7 @@ Containerized Deployment
 
 The app is provided via a docker container for ease of use and reproducibility. These are the basic steps to run the app on a GPU-enabled linux computer. We address two separate common use cases here. In the "remote access" case, you access the app on the server from, say, a personal computer. This is done via an ssh connection. Our instructions in this case assume you are using a linux/mac personal computer. In the "local access" case, you are sitting at the linux computer and can directly access the app from the computer's monitor. Note that the remote access case also outlines the simple steps needed to deploy this pipeline on the cloud (via AWS for example). 
 
-Step 0: There are some basic dependencies you will need on your linux machine: 
+**Step 0**: There are some basic dependencies you will need on your linux machine: 
 
 .. bulletlist::
 
@@ -19,14 +19,15 @@ Step 0: There are some basic dependencies you will need on your linux machine:
   * GPU drivers supporting CUDA 11.* applications 
    
 If using AWS, we recommend you launch from a linux AMI that (a) supports GPU use and (b) already has these basic dependencies. A great example is the NVIDIA GPU-Optimized AMI.
-Step 1: Clone the repo. Get the masknmf app repository onto the computer: 
+
+**Step 1**: Clone the repo. Get the masknmf app repository onto the computer: 
 
 .. code-block::
 
   cd
   git clone https://github.com/apasarkar/masknmf_full_pipeline.git
 
-Step 2: Upload the relevant dataset to the computer.
+**Step 2**: Upload the relevant dataset to the computer.
 
 If you have local access, you can do this step physically (for example, by using a hard drive to upload the data onto the system). 
 
@@ -36,7 +37,7 @@ If you have remote access, you can do the following on the command line:
 
   scp <Local_Path_To_Dataset> <Server_IP_Address>:<Some_Location_On_Server>
 
-Step 3: Launch the app on the remote instance
+**Step 3**: Launch the app on the remote instance
 You need to do the following: 
 
 .. code-block::
@@ -45,7 +46,7 @@ You need to do the following:
   cd masknmf_full_pipeline
   make launch dataname=<Absolute_Path_To_Your_Dataset>
 
-Step 4: Connect your local computer to the server to view/control the app.
+**Step 4**: Connect your local computer to the server to view/control the app.
 
 If you have local access, you can skip this step entirely. 
 
@@ -57,7 +58,7 @@ If you have remote access, note that he maskNMF app is currently exposed via por
 
 where <Server IP Address> is the IP address of the server.
 
-Step 5: Access the app
+**Step 5**: Access the app
 
 If you have local access to the computer, navigate to a browser and type "localhost:8981" to access the app. 
 
