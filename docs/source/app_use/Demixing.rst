@@ -10,7 +10,7 @@ As soon as the Preprocessing (motion correction and compression) steps have comp
 There are two initializations options you can use. You can use the superpixels approach first defined in Buchanan et al. (which is a local correlation based algorithm for identifying active cells) or the maskNMF cell initialization pipeline, called "Dense Data" in the app: 
 
 .. image:: ../images/Demix_Options.png
-   :width: 200
+   :width: 600
 
 The maskNMF initializattion was designed with for denser, volumetric imaging in mind but also works well for sparse, soma-targeted data. Note that the "Dense Data" initialization is meant to be used for the first pass through the data; all subsequent passes use superpixel initialization. To use the superpixels approach, first turn off the Dense Data switch. Then, the app enables a correlation threshold which you can interactively toggle to see how different correlation values affect the neural signal initialization, like so: 
 
