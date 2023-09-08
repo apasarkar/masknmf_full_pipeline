@@ -3,7 +3,7 @@
 Demixing Analyses
 =================
 
-As soon as the Preprocessing (motion correction and compression) steps have completed, the next stage is to idenify ROIs and demix them from the PMD compressed data. Conceptually, this stage can be broken into two steps: ROI identification and signal demixing. Through the Dash app, you can quickly and interactively go back and forth between these two stages in a "multi-pass" strategy. This allows you to initialize one set of cells, unmix these signals, and then repeat the process on the "residual" data (the data formed by subtracting off the cells you have already initialized from the PMD compressed representation of the movie). 
+As soon as the *preprocessing* (motion correction and compression) steps have completed, the next stage is to identify ROIs and demix them from the PMD compressed data. Conceptually, this stage can be broken into two steps: ROI identification and signal demixing. Through the Dash app, you can quickly and interactively go back and forth between these two stages in a "multi-pass" strategy. This allows you to initialize one set of cells, unmix these signals, and then repeat the process on the "residual" data (the data formed by subtracting off the cells you have already initialized from the PMD compressed representation of the movie). 
 
 **Step 1: ROI Identification**
 
@@ -12,7 +12,7 @@ There are two initializations options you can use. You can use the superpixels a
 .. image:: ../images/Demix_Options.png
    :width: 600
 
-The maskNMF initializattion was designed with for denser, volumetric imaging in mind but also works well for sparse, soma-targeted data. Note that the "Dense Data" initialization is meant to be used for the first pass through the data; all subsequent passes use superpixel initialization. To use the superpixels approach, first turn off the Dense Data switch. Then, the app enables a correlation threshold which you can interactively toggle to see how different correlation values affect the neural signal initialization, like so: 
+The maskNMF initialization was designed with dense, volumetric imaging or highly mixed signals in mind, but it also works well for sparse, soma-targeted data. *Note that the “Dense Data” initialization is meant to be used for the first pass through the data; all subsequent passes use superpixel initialization.* To use the superpixels approach, first turn off the Dense Data switch. Then, the app enables a correlation threshold which you can interactively toggle to see how different correlation values affect the neural signal initialization, like so: 
 
 .. image:: ../images/Superpixel_Initialization.png
    :width: 600

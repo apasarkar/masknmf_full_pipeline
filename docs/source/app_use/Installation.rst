@@ -6,7 +6,7 @@ Installation
 Containerized Deployment
 ------------------------
 
-The app is provided via a docker container for ease of use and reproducibility. These are the basic steps to run the app on a GPU-enabled linux computer. We address two separate common use cases here. In the "remote access" case, you access the app on the server from, say, a personal computer. This is done via an ssh connection. Our instructions in this case assume you are using a linux/mac personal computer. In the "local access" case, you are sitting at the linux computer and can directly access the app from the computer's monitor. Note that the remote access case also outlines the simple steps needed to deploy this pipeline on the cloud (via AWS for example). 
+The app is provided via a docker container for ease of use and reproducibility. These are the basic steps to run the app on a GPU-enabled linux computer. We address two separate common use cases here. In the “remote access” case, you access the app, which runs on a remote server, from your personal computer/laptop. This is done via an ssh connection. Our instructions in this case assume you are using a linux/mac personal computer. In the "local access” case, you are using a linux box directly, with the app locally installed and running on that computer. Note that the remote access case also outlines the simple steps needed to deploy this pipeline on the cloud (via AWS for example). 
 
 **Step 0**: There are some basic dependencies you will need on your linux machine: 
 
@@ -18,9 +18,9 @@ The app is provided via a docker container for ease of use and reproducibility. 
   * git
   * GPU drivers supporting CUDA 11.* applications 
    
-If using AWS, we recommend you launch from a linux AMI that (a) supports GPU use and (b) already has these basic dependencies. A great example is the NVIDIA GPU-Optimized AMI.
+If using AWS, we recommend you launch from a linux `AMI <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AMIs.html>`_ that (a) supports GPU use and (b) already has these basic dependencies. A great example is the `NVIDIA GPU-Optimized AMI <https://aws.amazon.com/marketplace/pp/prodview-7ikjtg3um26wq>`_.
 
-**Step 1**: Clone the repo. Get the masknmf app repository onto the computer: 
+**Step 1**: Clone the repo. Get the masknmf app repository onto the computer:
 
 .. code-block::
 
@@ -37,8 +37,7 @@ If you have remote access, you can do the following on the command line:
 
   scp <Local_Path_To_Dataset> <Server_IP_Address>:<Some_Location_On_Server>
 
-**Step 3**: Launch the app on the remote instance
-You need to do the following: 
+**Step 3**: Launch the app on the remote instance. You need to do the following: 
 
 .. code-block::
 
@@ -68,7 +67,3 @@ If you have remote access, navigate to your browser and type "localhost:<X>" whe
 Local Deployment without container
 ----------------------------------
 It is also possible to run this pipeline without docker, though this is not recommended and will require careful installation of GPU compute libraries. See the dockerfile in the repository for a starting point which can be modified for your system.
-
-
-
-
